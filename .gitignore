@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Generated debug files
+dist/*.map
+
+# Test coverage
+coverage/
+
+# Packaged extensions and release archives
+*.crx
+*.zip
+*.tgz
+
+# Chrome extension private keys — never commit
+*.pem
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editors
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local Codex files
+.codex/
+.agents/
