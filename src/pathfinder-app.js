@@ -10,9 +10,7 @@ export const installPathfinderApp = () => {
   const CONFIG_KEY = "3place-pathfinder-v1";
   const LEGACY_CONFIG_KEY = "3place-minecraft-walk-v1";
   const PANEL_POSITION_KEY = "3place-pathfinder-panel-position-v1";
-  const APP_SPEED_KEY = "3place-fly-speed-v1";
   const VERSION = __PATHFINDER_VERSION__;
-  const DEFAULT_SPEED = 5.2;
   const DEFAULT_FIRST_PERSON_FOV = 75;
   const DEFAULT_THIRD_PERSON_DISTANCE = 4.25;
   const UI_TIMING = Object.freeze({
@@ -22,57 +20,12 @@ export const installPathfinderApp = () => {
     CAMERA_STATUS_REFRESH_MS: 250,
     BOOT_RETRY_MS: 200,
   });
-  const clampSpeed = (value) => {
-    const number = Number(value);
-    return Number.isFinite(number)
-      ? Math.max(2, Math.min(12, number))
-      : DEFAULT_SPEED;
-  };
   const clampFirstPersonFov = (value) => {
     const number = Number(value);
     return Number.isFinite(number)
       ? Math.max(35, Math.min(110, number))
       : null;
   };
-  // Compatibility adapter for 3place's private movement-speed setting.
-  // APP_SPEED_KEY and its JSON-number format are not a public API, so all
-  // reads/writes stay here and are validated before touching application data.
-  const appSpeedStorage = Object.freeze({
-    readRaw: () => {
-      try {
-        return localStorage.getItem(APP_SPEED_KEY);
-      } catch {
-        return null;
-      }
-    },
-    serialize: (value) => JSON.stringify(clampSpeed(value)),
-    inspectRaw: (raw) => {
-      if (raw === null) return { supported: true, raw };
-      try {
-        return { supported: Number.isFinite(JSON.parse(raw)), raw };
-      } catch {
-        return { supported: false, raw };
-      }
-    },
-    writeSpeed: (value) => {
-      try {
-        localStorage.setItem(APP_SPEED_KEY, JSON.stringify(clampSpeed(value)));
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    restoreRaw: (raw) => {
-      if (!appSpeedStorage.inspectRaw(raw).supported) return false;
-      try {
-        if (raw === null) localStorage.removeItem(APP_SPEED_KEY);
-        else localStorage.setItem(APP_SPEED_KEY, raw);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-  });
   const clampThirdPersonDistance = (value) => {
     const number = Number(value);
     return Number.isFinite(number)
@@ -122,7 +75,6 @@ export const installPathfinderApp = () => {
       if (parsed) {
         return {
           enabled: parsed.enabled !== false,
-          speed: clampSpeed(parsed.speed),
           headlightEnabled:
             parsed.headlightEnabled !== undefined
               ? parsed.headlightEnabled !== false
@@ -155,10 +107,6 @@ export const installPathfinderApp = () => {
           cameraCrop: normalizeCameraCrop(parsed.cameraCrop),
           cameraUnofficialCredit:
             parsed.cameraUnofficialCredit !== false,
-          previousSpeed:
-            typeof parsed.previousSpeed === "string"
-              ? parsed.previousSpeed
-              : null,
           language: SUPPORTED_LANGUAGES.has(parsed.language)
             ? parsed.language
             : "auto",
@@ -167,7 +115,6 @@ export const installPathfinderApp = () => {
     } catch {}
     return {
       enabled: true,
-      speed: DEFAULT_SPEED,
       headlightEnabled: true,
       lightIntensity: 90,
       darkNight: false,
@@ -177,15 +124,11 @@ export const installPathfinderApp = () => {
       cameraVideoFormat: "auto",
       cameraCrop: null,
       cameraUnofficialCredit: true,
-      previousSpeed: appSpeedStorage.readRaw(),
       language: "auto",
     };
   };
   let config = readConfig();
   setUiLanguage(config.language);
-  let managedAppSpeedRaw = config.enabled
-    ? appSpeedStorage.serialize(config.speed)
-    : null;
   let hint = null;
   let touchFlightButton = null;
   let touchFirstPersonControls = null;
@@ -335,7 +278,6 @@ export const installPathfinderApp = () => {
     const thirdStatus = root?.dataset.pathfinderThirdPersonStatus;
     const resolverStatus = root?.dataset.pathfinderThreeResolver || "pending";
     const resolverErrors = root?.dataset.pathfinderThreeError || "";
-    const speedStatus = root?.dataset.pathfinderSpeedAdapter || "pending";
     const pointerStatus = root?.dataset.pathfinderPointerLock || "pending";
     const cameraApi = window.__pathfinderCamera;
     const cameraState = cameraApi?.getState?.();
@@ -360,26 +302,6 @@ export const installPathfinderApp = () => {
         : resolverStatus === "pending" || resolverStatus === "source-fallback"
           ? "waiting"
           : "ok";
-    const speedLabels = {
-      pending: tr("未確認", "Not checked"),
-      ready: tr("利用可能", "Available"),
-      inactive: tr("待機", "Standby"),
-      "format-unsupported": tr("形式不明", "Unknown format"),
-      "write-error": tr("保存エラー", "Save error"),
-      "restore-error": tr("復元エラー", "Restore error"),
-    };
-    const speedHasError = [
-      "format-unsupported",
-      "write-error",
-      "restore-error",
-    ].includes(speedStatus);
-    widget.compatSpeed.textContent =
-      speedLabels[speedStatus] || tr("確認中", "Checking");
-    widget.compatSpeed.dataset.level = speedHasError
-      ? "error"
-      : speedStatus === "pending" || speedStatus === "inactive"
-        ? "waiting"
-        : "ok";
     const pointerLabels = {
       pending: tr("未確認", "Not checked"),
       idle: tr("待機", "Standby"),
@@ -421,9 +343,6 @@ export const installPathfinderApp = () => {
     }
     if (thirdStatus === "error" || thirdStatus === "avatar-error") {
       unavailable.push(tr("三人称", "Third-person"));
-    }
-    if (speedHasError) {
-      unavailable.push(tr("移動速度調整", "Movement speed adjustment"));
     }
     if (pointerStatus === "unsupported") {
       unavailable.push(tr("三人称ペイント", "Third-person painting"));
@@ -476,23 +395,6 @@ export const installPathfinderApp = () => {
       );
     }
     if (errorReasons) alerts.push(`${tr("原因", "Reason")}: ${errorReasons}`);
-    const speedErrorLabels = {
-      "format-unsupported": tr(
-        "3placeの速度設定形式が変更されています",
-        "The 3place speed-setting format has changed",
-      ),
-      "write-error": tr(
-        "速度設定を保存できませんでした",
-        "Could not save the speed setting",
-      ),
-      "restore-error": tr(
-        "変更前の速度設定を復元できませんでした",
-        "Could not restore the previous speed setting",
-      ),
-    };
-    if (speedHasError) {
-      alerts.push(`${tr("原因", "Reason")}: ${speedErrorLabels[speedStatus]}`);
-    }
     if (pointerStatus === "relock-error") {
       alerts.push(
         tr(
@@ -643,6 +545,9 @@ export const installPathfinderApp = () => {
     }
     const root = document.createElement("div");
     root.id = "pathfinder-camera-crop";
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-modal", "true");
+    root.setAttribute("aria-label", tr("撮影範囲を選択", "Select capture area"));
     root.innerHTML = `<div class="crop-box"><div class="crop-toolbar"><span>${tr("撮影範囲", "Capture area")}</span><button class="crop-apply" type="button">${tr("決定", "Apply")}</button><button class="crop-full" type="button">${tr("全画面", "Full screen")}</button><button class="crop-cancel" type="button">${tr("取消", "Cancel")}</button></div><span class="crop-resize" aria-hidden="true"></span></div>`;
     document.body.append(root);
     const restoreCameraDialog =
@@ -721,6 +626,7 @@ export const installPathfinderApp = () => {
     const close = () => {
       root.remove();
       removeEventListener("keydown", onKeyDown, true);
+      removeEventListener("resize", onViewportChange);
       if (restoreCameraDialog && widget?.root?.isConnected) {
         widget.root.dataset.panelSection = "camera";
         widget.root.dataset.open = "true";
@@ -756,52 +662,16 @@ export const installPathfinderApp = () => {
       event.stopImmediatePropagation();
       closeCameraCropSelector();
     };
+    const onViewportChange = () => closeCameraCropSelector();
     root.querySelector(".crop-apply").onclick = apply;
     root.querySelector(".crop-full").onclick = useFullScreen;
     root.querySelector(".crop-cancel").onclick = closeCameraCropSelector;
     addEventListener("keydown", onKeyDown, true);
+    addEventListener("resize", onViewportChange);
     cameraCropOverlay = { root, close };
   };
   
-  // 3place-owned movement-speed storage adapter
-  const publishAppSpeedStatus = (status) => {
-    if (document.documentElement) {
-      document.documentElement.dataset.pathfinderSpeedAdapter = status;
-    }
-  };
-  const syncAppSpeedSetting = () => {
-    const currentRaw = appSpeedStorage.readRaw();
-    if (config.enabled) {
-      if (!appSpeedStorage.inspectRaw(currentRaw).supported) {
-        publishAppSpeedStatus("format-unsupported");
-        return;
-      }
-      const nextRaw = appSpeedStorage.serialize(config.speed);
-      if (currentRaw !== managedAppSpeedRaw) {
-        config.previousSpeed = currentRaw;
-      }
-      if (appSpeedStorage.writeSpeed(config.speed)) {
-        managedAppSpeedRaw = nextRaw;
-        publishAppSpeedStatus("ready");
-      } else {
-        publishAppSpeedStatus("write-error");
-      }
-      return;
-    }
-    // Restore only while the value is still ours. If 3place or the user changed
-    // it independently, leave that newer value untouched.
-    if (managedAppSpeedRaw !== null && currentRaw === managedAppSpeedRaw) {
-      if (!appSpeedStorage.restoreRaw(config.previousSpeed)) {
-        publishAppSpeedStatus("restore-error");
-        managedAppSpeedRaw = null;
-        return;
-      }
-    }
-    managedAppSpeedRaw = null;
-    publishAppSpeedStatus("inactive");
-  };
   const save = () => {
-    syncAppSpeedSetting();
     try {
       localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
     } catch {}
@@ -877,7 +747,6 @@ export const installPathfinderApp = () => {
     updateFirstPersonFovControl();
     widget.thirdPersonDistance.disabled =
       !config.enabled || config.thirdPersonView === "off";
-    widget.speed.disabled = !config.enabled;
     widget.state.textContent =
       state === "walking"
         ? "WALKING"
@@ -1200,6 +1069,51 @@ export const installPathfinderApp = () => {
     #mcwalk-userscript [data-level=error] { color: var(--bad) !important; }
     #mcwalk-userscript .reload-row { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-soft); }
     #mcwalk-userscript .note { color: var(--warn); font-size: 11px; font-weight: 600; }
+
+    /* Capture-area selector. It lives outside #mcwalk-userscript so it needs
+       its own complete positioning and control styles. */
+    #pathfinder-camera-crop, #pathfinder-camera-crop * { box-sizing: border-box; }
+    #pathfinder-camera-crop {
+      position: fixed; inset: 0; z-index: 2147483646; overflow: hidden;
+      color: #efe9dc; font: 600 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      user-select: none; touch-action: none;
+    }
+    #pathfinder-camera-crop .crop-box {
+      position: fixed; min-width: 1px; min-height: 1px; border: 2px solid #53c9ef;
+      background: rgba(83, 201, 239, .04);
+      box-shadow: 0 0 0 9999px rgba(4, 6, 11, .62), 0 0 16px rgba(83, 201, 239, .7);
+      cursor: move; touch-action: none;
+    }
+    #pathfinder-camera-crop .crop-box::before {
+      content: ""; position: absolute; inset: 5px; border: 1px dashed rgba(255, 255, 255, .7);
+      pointer-events: none;
+    }
+    #pathfinder-camera-crop .crop-toolbar {
+      position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%;
+      display: flex; align-items: center; gap: 6px; max-width: calc(100vw - 24px);
+      padding: 7px; border: 1px solid #59503f; border-radius: 5px;
+      background: #1d1b17; box-shadow: 0 4px 16px rgba(0, 0, 0, .52);
+      transform: translateX(-50%); cursor: default; white-space: nowrap;
+    }
+    #pathfinder-camera-crop .crop-toolbar span { margin: 0 4px 0 2px; color: #dcb06a; }
+    #pathfinder-camera-crop .crop-toolbar button {
+      min-height: 30px; padding: 5px 9px; border: 1px solid #59503f; border-radius: 4px;
+      color: #efe9dc; background: #2b2822; font: inherit; cursor: pointer;
+    }
+    #pathfinder-camera-crop .crop-toolbar button:hover,
+    #pathfinder-camera-crop .crop-toolbar button:focus-visible {
+      border-color: #c99a4a; background: #302c25; outline: none;
+    }
+    #pathfinder-camera-crop .crop-resize {
+      position: absolute; right: 6px; bottom: 6px; width: 24px; height: 24px;
+      border-right: 5px solid #53c9ef; border-bottom: 5px solid #53c9ef;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .8)); cursor: nwse-resize; touch-action: none;
+    }
+
+    @media (max-width: 520px) {
+      #pathfinder-camera-crop .crop-toolbar { flex-wrap: wrap; justify-content: center; white-space: normal; }
+      #pathfinder-camera-crop .crop-toolbar span { flex-basis: 100%; text-align: center; }
+    }
   
     /* 一般設定: 装飾カードではなく区切り線中心のツール画面 */
     #mcwalk-userscript .settings-header {
@@ -1440,10 +1354,6 @@ export const installPathfinderApp = () => {
             <h3 id="pathfinder-basic-settings">${tr("基本", "General")}</h3>
             <label><span>${tr("機能を有効にする", "Enable features")}</span><input class="enabled" type="checkbox"></label>
             <label><span>${tr("言語(Language)", "Language(言語)")}</span><select class="language"><option value="auto">${tr("自動（ブラウザー）", "Auto (browser)")}</option><option value="ja">${tr("日本語", "Japanese")}</option><option value="en">English</option></select></label>
-            <div class="range">
-              <span>${tr("移動速度", "Movement speed")}</span><output class="speed-value"></output>
-              <input class="speed" type="range" min="2" max="12" step=".2">
-            </div>
           </section>
   
           <section class="settings-group" aria-labelledby="pathfinder-view-settings">
@@ -1488,7 +1398,6 @@ export const installPathfinderApp = () => {
             <div class="compat-grid">
               <span>${tr("3D接続", "3D connection")}</span><span class="compat-hook">${tr("3D表示待ち", "Waiting for 3D view")}</span>
               <span>${tr("3D部品", "3D components")}</span><span class="compat-resolver">${tr("未使用", "Not used")}</span>
-              <span>${tr("移動速度", "Movement speed")}</span><span class="compat-speed">${tr("未確認", "Not checked")}</span>
               <span>${tr("三人称操作", "Third-person controls")}</span><span class="compat-pointer">${tr("未確認", "Not checked")}</span>
               <span>${tr("ライト", "Lights")}</span><span class="bridge-status">${tr("接続待ち", "Waiting to connect")}</span>
               <span>${tr("三人称", "Third-person")}</span><span class="third-person-status">${tr("準備中", "Preparing")}</span>
@@ -1518,8 +1427,6 @@ export const installPathfinderApp = () => {
       state: get(".state"),
       enabled: get(".enabled"),
       language: get(".language"),
-      speed: get(".speed"),
-      speedValue: get(".speed-value"),
       firstPersonFov: get(".first-person-fov"),
       firstPersonFovValue: get(".first-person-fov-value"),
       firstPersonFovReset: get(".fov-reset"),
@@ -1539,7 +1446,6 @@ export const installPathfinderApp = () => {
       compatSummary: get(".compat-summary"),
       compatHook: get(".compat-hook"),
       compatResolver: get(".compat-resolver"),
-      compatSpeed: get(".compat-speed"),
       compatPointer: get(".compat-pointer"),
       compatCamera: get(".compat-camera"),
       compatAlert: get(".compat-alert"),
@@ -1552,8 +1458,6 @@ export const installPathfinderApp = () => {
     };
     widget.enabled.checked = config.enabled;
     widget.language.value = config.language;
-    widget.speed.value = String(config.speed);
-    widget.speedValue.textContent = `${config.speed.toFixed(1)} block/s`;
     widget.thirdPersonView.value = config.thirdPersonView;
     widget.cameraView.value = config.thirdPersonView;
     widget.cameraFormat.value = config.cameraVideoFormat;
@@ -1664,15 +1568,6 @@ export const installPathfinderApp = () => {
       setFirstPersonFov(widget.firstPersonFov.value, false);
     };
     widget.firstPersonFovReset.onclick = resetFirstPersonFov;
-    widget.speed.oninput = () => {
-      config.speed = clampSpeed(widget.speed.value);
-      widget.speedValue.textContent = `${config.speed.toFixed(1)} block/s`;
-      widget.note.textContent = tr(
-        "速度は再読み込み後に反映",
-        "Speed applies after reloading",
-      );
-      save();
-    };
     widget.headlight.onchange = () => {
       config.headlightEnabled = widget.headlight.checked;
       save();
@@ -1733,7 +1628,6 @@ export const installPathfinderApp = () => {
           "data-pathfinder-three-resolver",
           "data-pathfinder-three-error",
           "data-pathfinder-three-details",
-          "data-pathfinder-speed-adapter",
           "data-pathfinder-pointer-lock",
           "data-pathfinder-native-fov",
           "data-pathfinder-fov-status",

@@ -2,13 +2,12 @@
 
 # 3place Pathfinder
 
-**Enhanced movement, flexible camera controls, dynamic lighting, and media capture for [3place](https://3place.world/).**
+**Camera controls, dynamic lighting, capture tools, and first-person conveniences for [3place](https://3place.world/).**
 
-[![Userscript v1.2.1](https://img.shields.io/badge/userscript-v1.2.1-2ea44f)](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.1.user.js)
-![Manifest V3](https://img.shields.io/badge/Chrome-Manifest%20V3-4285F4?logo=googlechrome&logoColor=white)
+[![Userscript v1.2.2](https://img.shields.io/badge/userscript-v1.2.2-2ea44f)](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.2.user.js)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[Install userscript](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.1.user.js) · [Features](#features) · [Controls](#controls) · [Development](#development) · [日本語](#日本語の概要)
+[Install userscript](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.2.user.js) · [Features](#features) · [Controls](#controls) · [Development](#development) · [日本語](#日本語の概要)
 
 </div>
 
@@ -17,24 +16,19 @@
 
 ## Overview
 
-3place Pathfinder enhances the first-person experience on 3place without replacing its native movement physics. Walking, gravity, collision detection, and jumping continue to use 3place's own systems, while Pathfinder adds camera, lighting, capture, and convenience controls around them.
+3place Pathfinder builds on the current 3place experience rather than replacing it. Walking, gravity, collision detection, jumping, and the walking/flight toggle are all native 3place features. Pathfinder automatically selects native walking mode on entry, then adds camera, lighting, live capture, and compatibility conveniences around it.
 
-Two editions are included:
+3place also provides its own movement-speed setting, Showcase photo workflow, Replay video export, dynamic sky, and pointer-lock recovery. Pathfinder leaves movement speed to the official setting. Its capture tools are designed for quick captures of the current Pathfinder view and live, player-controlled recording, while its cursor recovery is specifically for Pathfinder's third-person painting controls.
 
-- **Userscript — recommended:** the complete feature set, distributed as a single Tampermonkey-compatible file.
-- **Chrome/Edge extension:** a smaller Manifest V3 edition focused on walking, helmet lights, speed settings, and URL repair.
-
-Do not enable both editions at the same time.
+Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 
 ## Features
 
-### Movement
+### First-person convenience
 
-- Start each first-person session in walking mode
-- Use `Space` as a normal jump instead of vertical flight
-- Double-tap `Space` to switch freely between walking and flying
-- Configure movement speed from 2 to 12 blocks per second
-- Automatically repair saved camera URLs whose tilt exceeds 90 degrees
+- Automatically start each first-person session in 3place's native walking mode
+- Keep the native `Space` jump and double-`Space` walking/flight toggle unchanged
+- Clamp out-of-range tilt in saved camera URLs while preserving the remaining position values
 
 ### Camera and view controls
 
@@ -42,66 +36,41 @@ Do not enable both editions at the same time.
 - Switch between first-person, rear third-person, and front third-person views
 - Adjust third-person camera distance with the mouse wheel
 - Reconstruct and display your local avatar in third-person mode
-- Recover pointer-lock controls after using the paint cursor
+- Restore first-person pointer-lock after using Pathfinder's third-person paint cursor
 
 ### Lighting
 
 - Add a real Three.js helmet spotlight aligned with your view
 - Add direction-aware helmet lights to nearby players
 - Limit nearby lights to the 12 closest players to reduce rendering cost
-- Restore the darker nighttime appearance with **Dark Night** mode
+- Disable 3place's nighttime visibility correction with **Dark Night** mode
 
 ### Photo and video capture
 
-- Save composited PNG screenshots without the Pathfinder controls
-- Record silent 30 fps video as MP4/H.264 or WebM when supported
+- Quick-save the current Pathfinder view, including third-person views, as a composited PNG without controls
+- Record the live, player-controlled current view as silent 30 fps MP4/H.264 or WebM when supported
 - Select a custom capture region directly on the 3D view
 - Include an optional unofficial recording credit
 
 ### Interface
 
 - Movable on-screen launcher and settings panel
-- Japanese and English UI with automatic browser-language detection
+- Japanese and English Pathfinder UI with automatic browser-language detection
 - Built-in compatibility diagnostics for 3place updates
 - Persistent settings stored locally in the browser
 
-## Edition comparison
-
-| Feature | Userscript | Chrome/Edge extension |
-| --- | :---: | :---: |
-| Walking mode and jump controls | ✓ | ✓ |
-| Configurable movement speed | ✓ | ✓ |
-| Local and nearby-player helmet lights | ✓ | ✓ |
-| Broken camera URL repair | ✓ | ✓ |
-| Japanese and English UI | ✓ | ✓ |
-| First-person FOV controls | ✓ | — |
-| Rear/front third-person views | ✓ | — |
-| Dark Night mode | ✓ | — |
-| Photo and video capture | ✓ | — |
-| Compatibility diagnostics | ✓ | — |
-
 ## Installation
 
-### Userscript — recommended
-
 1. Install [Tampermonkey](https://www.tampermonkey.net/) in Chrome, Edge, or Firefox.
-2. Click **[Install 3place Pathfinder](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.1.user.js)**.
+2. Click **[Install 3place Pathfinder](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.2.user.js)**.
 3. Confirm the installation in Tampermonkey.
 4. Reload [3place](https://3place.world/).
 
-Alternatively, open [`dist/3place-pathfinder-v1.2.1.user.js`](./dist/3place-pathfinder-v1.2.1.user.js), copy its contents into a new Tampermonkey script, and save it.
-
-### Chrome/Edge extension
-
-1. Clone or download this repository.
-2. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge.
-3. Enable **Developer mode**.
-4. Select **Load unpacked** and choose the repository folder.
-5. Reload 3place.
-
-The unpacked extension is intended for development and manual installation. Chrome Web Store distribution is not currently provided.
+Alternatively, open [`dist/3place-pathfinder-v1.2.2.user.js`](./dist/3place-pathfinder-v1.2.2.user.js), copy its contents into a new Tampermonkey script, and save it.
 
 ## Controls
+
+The movement inputs below are native 3place controls. Pathfinder preserves them and adds the view, lighting, and capture shortcuts.
 
 | Input | Action |
 | --- | --- |
@@ -116,7 +85,7 @@ The unpacked extension is intended for development and manual installation. Chro
 | `Alt+T` | Toggle helmet lights |
 | `Alt+N` | Toggle Dark Night mode |
 
-Movement-speed changes take effect after reloading the page. Language changes also reload the page so the complete interface updates consistently.
+Movement speed remains available through 3place's own settings. Language changes reload the page so the complete Pathfinder interface updates consistently.
 
 ## Data and privacy
 
@@ -157,8 +126,6 @@ src/
 
 The userscript version is defined in [`package.json`](./package.json) and injected automatically into the metadata and interface during the build. Generated `.user.js` files live in [`dist/`](./dist/); edit files in `src/`, not the generated bundle.
 
-The extension edition is maintained separately in `manifest.json`, `background.js`, `bridge.js`, `content.js`, and `styles.css`.
-
 ## Compatibility notes
 
 Pathfinder integrates with implementation details of 3place and its Three.js scene. A 3place update may temporarily break lighting, avatar reconstruction, camera controls, or capture until the compatibility adapters are updated.
@@ -172,7 +139,7 @@ If something stops working, please open an issue with:
 
 ## Contributing
 
-Bug reports and pull requests are welcome. Please keep changes focused, run `npm run check`, and avoid committing `node_modules`, extension packages, private keys, or generated source maps.
+Bug reports and pull requests are welcome. Please keep changes focused, run `npm run check`, and avoid committing `node_modules`, release archives, private keys, or generated source maps.
 
 ## License
 
@@ -183,11 +150,13 @@ Released under the [MIT License](./LICENSE).
 <details>
 <summary>日本語で表示</summary>
 
-3place Pathfinderは、3placeへ歩行機能、三人称視点、ヘルメットライト、ダークナイト、静止画・動画撮影などを追加する非公式ツールです。
+3place Pathfinderは、3place標準の一人称モードを歩行で開始し、三人称視点、ヘルメットライト、ダークナイト、静止画・動画撮影などを追加する非公式ツールです。歩行・重力・ジャンプ・飛行切り替えは3place本体の機能をそのまま利用し、移動速度も3place標準設定に任せます。
 
-通常はTampermonkey版を推奨します。上部の **Install userscript** からインストールできます。Chrome/Edge拡張版とuserscript版は同時に有効化しないでください。
+静止画・動画機能は、3place標準のShowcase撮影やReplay書き出しを置き換えるものではありません。Pathfinderで表示している一人称・三人称視点のクイック撮影と、現在の操作をそのまま記録するライブ録画を目的としています。
 
-主な操作：
+Tampermonkeyへ上部の **Install userscript** からインストールして利用します。
+
+主な操作（移動関連は3place標準）：
 
 - `Space`: ジャンプ
 - `Space`を素早く2回: 歩行・飛行を切り替え

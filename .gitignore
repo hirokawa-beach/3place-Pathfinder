@@ -7,12 +7,11 @@ dist/*.map
 # Test coverage
 coverage/
 
-# Packaged extensions and release archives
-*.crx
+# Release archives
 *.zip
 *.tgz
 
-# Chrome extension private keys — never commit
+# Private keys — never commit
 *.pem
 
 # Environment files
