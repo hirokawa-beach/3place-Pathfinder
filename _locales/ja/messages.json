@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "3place Pathfinder"
+  },
+  "extensionDescription": {
+    "message": "3placeに歩行、自分と周囲のヘッドライト、壊れた位置URLの自動修復を追加します。"
+  }
+}

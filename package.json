@@ -1,0 +1,14 @@
+{
+  "name": "3place-pathfinder",
+  "version": "1.2.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-userscript.mjs",
+    "watch": "node scripts/build-userscript.mjs --watch",
+    "check": "npm run build && node scripts/check-userscript.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.8"
+  }
+}
