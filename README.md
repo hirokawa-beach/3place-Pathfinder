@@ -7,7 +7,7 @@
 [![Userscript v1.2.2](https://img.shields.io/badge/userscript-v1.2.2-2ea44f)](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.2.user.js)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[Install userscript](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.2.user.js) · [Features](#features) · [Controls](#controls) · [Development](#development) · [日本語](#日本語の概要)
+[Install userscript](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.2.user.js) · [Features](#features) · [Third-person](#third-person-view) · [Controls](#controls) · [Development](#development) · [日本語](#日本語の概要)
 
 </div>
 
@@ -58,6 +58,17 @@ Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 - Japanese and English Pathfinder UI with automatic browser-language detection
 - Built-in compatibility diagnostics for 3place updates
 - Persistent settings stored locally in the browser
+
+## Third-person view
+
+Pathfinder's third-person camera runs on top of an active 3place first-person session. Enter first-person mode normally, then press `V` or `Alt+V` to cycle through **first-person → rear → front**. Movement, collision detection, jumping, and flying continue to use 3place's native controls and physics.
+
+- **Rear view** follows your avatar from behind for movement and exploration.
+- **Front view** faces your avatar and is useful for portraits and live capture.
+- Pathfinder uses your existing presence avatar when available, or reconstructs your local avatar from same-origin 3place account and avatar data.
+- Camera distance can be adjusted from the settings panel or with the mouse wheel while third-person is active.
+- Rear-view painting uses a screen-position cursor and restores first-person pointer-lock after leaving paint mode. This cursor-assisted painting behavior is currently limited to rear view.
+- Pathfinder photos and live video recordings can use either rear or front third-person view, including the displayed local avatar.
 
 ## Installation
 
@@ -153,6 +164,17 @@ Released under the [MIT License](./LICENSE).
 3place Pathfinderは、3place標準の一人称モードを歩行で開始し、三人称視点、ヘルメットライト、ダークナイト、静止画・動画撮影などを追加する非公式ツールです。歩行・重力・ジャンプ・飛行切り替えは3place本体の機能をそのまま利用し、移動速度も3place標準設定に任せます。
 
 静止画・動画機能は、3place標準のShowcase撮影やReplay書き出しを置き換えるものではありません。Pathfinderで表示している一人称・三人称視点のクイック撮影と、現在の操作をそのまま記録するライブ録画を目的としています。
+
+### 三人称視点
+
+3place標準の一人称モードへ入った状態で、`V`または`Alt+V`を押すと「一人称 → 三人称・後方 → 三人称・正面」の順に切り替わります。移動・衝突判定・ジャンプ・飛行は引き続き3place本体の機能を利用します。
+
+- 後方視点は移動や探索向け、正面視点はアバター撮影向けです。
+- 自分のアバターが3D空間に存在しない場合は、3place内のアカウント・アバターデータからローカル表示を再構築します。
+- 三人称中は設定画面またはマウスホイールでカメラ距離を変更できます。
+- 建物がカメラとの間に入ると自動的に距離を縮め、障害物がなくなると滑らかに元の距離へ戻します。
+- 後方視点では画面上のカーソル位置を使ってペイントでき、ペイント終了後は一人称の視点操作へ復帰します。このペイント補助は現在、後方視点のみ対応です。
+- 後方・正面視点は、Pathfinderの静止画撮影とライブ録画にもそのまま使用できます。
 
 Tampermonkeyへ上部の **Install userscript** からインストールして利用します。
 
