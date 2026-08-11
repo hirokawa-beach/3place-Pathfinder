@@ -2440,8 +2440,9 @@ export const installPageBridge = () => {
     const gap = Math.round(8 * scale);
     const pillHeight = fontSize + padY * 2;
     const y = height - margin - pillHeight;
-    const brand = "3place";
-    const unofficialCredit = "recording by Pathfinder(unofficial)";
+    const brand = "3place.world";
+    const unofficialCredit =
+      "recording by 3place Pathfinder(unofficial)";
     const showUnofficialCredit =
       document.documentElement?.dataset
         .pathfinderCameraUnofficialCredit !== "false";
