@@ -517,7 +517,7 @@ export const installPathfinderApp = () => {
       if (api.getState().recording) {
         await api.stopRecording();
       } else {
-        api.startRecording();
+        await api.startRecording();
       }
     } catch (error) {
       console.warn("3place Pathfinder video failed", error);
