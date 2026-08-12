@@ -26,6 +26,17 @@ const requirements = [
     "Pathfinder graphics settings are missing",
   ],
   [
+    output.includes("3place.world") &&
+      output.includes("recording by 3place Pathfinder(unofficial)"),
+    "capture credits are missing",
+  ],
+  [
+    output.includes(".space-backdrop, #mapWrap canvas") &&
+      output.includes("basemap.triggerRepaint()") &&
+      output.includes("CAMERA_BASEMAP_RENDER_TIMEOUT_MS"),
+    "ocean/sky capture synchronization is missing",
+  ],
+  [
     output.includes("#pathfinder-camera-crop .crop-box") &&
       output.includes("#pathfinder-camera-crop .crop-resize"),
     "capture-area selector styles are missing",
