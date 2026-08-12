@@ -20,6 +20,12 @@ const requirements = [
   [output.includes("__mcwalk3dBridgeInstalled"), "3D bridge is missing"],
   [output.includes("mcwalk-userscript"), "Pathfinder UI is missing"],
   [
+    output.includes("pathfinderGraphicsProfile") &&
+      output.includes("Pathfinder graphics") &&
+      output.includes("maxOtherPlayerLights"),
+    "Pathfinder graphics settings are missing",
+  ],
+  [
     output.includes("3place.world") &&
       output.includes("recording by 3place Pathfinder(unofficial)"),
     "capture credits are missing",

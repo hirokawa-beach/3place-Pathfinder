@@ -55,6 +55,7 @@ Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 ### Interface
 
 - Movable on-screen launcher and settings panel
+- Quality, balanced, and performance profiles for Pathfinder-only rendering costs without changing 3place's official graphics settings
 - Japanese and English Pathfinder UI with automatic browser-language detection
 - Built-in compatibility diagnostics for 3place updates
 - Persistent settings stored locally in the browser
