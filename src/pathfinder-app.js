@@ -966,14 +966,28 @@ export const installPathfinderApp = () => {
   // remains self-contained when installed from GitHub or Tampermonkey.
   const CSS = `
     #mcwalk-userscript {
-      --bg: #1d1b17; --panel: #221f1a; --chip: #2b2822;
-      --line: #3c372e; --line-soft: #302c25; --line-strong: #59503f;
-      --ink: #efe9dc; --ink-dim: #a79f8d; --ink-faint: #756c5b;
-      --accent: #c99a4a; --accent-bright: #dcb06a;
-      --warn: #c9793f; --bad: #bd5b4d;
+      --pf-accent: var(--accent, #0d9488);
+      --pf-accent-ink: var(--accent-ink, #0b6e66);
+      --pf-accent-tint: var(--accent-tint, rgba(13, 148, 136, .14));
+      --pf-glass-border: var(--glass-border, rgba(255, 255, 255, .7));
+      --pf-glass-fill: var(--glass-fill, rgba(255, 255, 255, .74));
+      --pf-glass-hover: var(--glass-fill-hover, rgba(255, 255, 255, .9));
+      --pf-panel-fill: rgba(255, 255, 255, .94);
+      --pf-control-fill: rgba(255, 255, 255, .78);
+      --pf-control-border: rgba(20, 30, 50, .16);
+      --pf-row-hover: rgba(255, 255, 255, .52);
+      --pf-divider: rgba(32, 41, 58, .11);
+      --pf-text: var(--text, #20293a);
+      --pf-text-2: var(--text-2, #5a6572);
+      --pf-text-3: #606a79;
+      --pf-text-3: color-mix(in srgb, var(--text-3, #8a93a3) 60%, var(--text, #20293a));
+      --pf-shadow-chrome: var(--shadow-chrome, 0 8px 22px rgba(25, 35, 55, .18));
+      --pf-shadow-modal: var(--shadow-modal, 0 24px 60px rgba(20, 30, 55, .32));
+      --pf-shadow-pressed: var(--shadow-chrome-pressed, 0 4px 12px rgba(25, 35, 55, .16));
+      --pf-warn: #9a570f; --pf-bad: #c43d3d;
       position: fixed; top: 50%; left: max(16px, env(safe-area-inset-left)); right: auto;
       transform: translateY(-50%); z-index: 2147483600; width: max-content; max-width: calc(100vw - 32px);
-      color: var(--ink); font: 500 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--pf-text); font: 500 13px/1.45 "Space Grotesk", system-ui, sans-serif;
     }
     #mcwalk-userscript, #mcwalk-userscript * { box-sizing: border-box; }
     /* アイコン入口とサブボタン */
@@ -981,119 +995,170 @@ export const installPathfinderApp = () => {
     #mcwalk-userscript button { font: inherit; border: 0; }
     #mcwalk-userscript .app-icon {
       display: block; width: 56px; height: 56px; padding: 0; overflow: hidden;
-      border: 1px solid #2c7698; border-radius: 13px; background: #071426;
-      box-shadow: 0 3px 10px rgba(0,0,0,.42); cursor: grab; touch-action: none;
+      border: 1px solid var(--pf-glass-border); border-radius: 13px; background: #071426;
+      box-shadow: var(--pf-shadow-chrome); cursor: grab; touch-action: none;
+      transition: box-shadow .16s ease, border-color .16s ease;
     }
-    #mcwalk-userscript .app-icon:hover { border-color: #53c9ef; }
-    #mcwalk-userscript .app-icon:focus-visible { outline: 2px solid #6bd8f5; outline-offset: 2px; }
+    #mcwalk-userscript .app-icon:hover { border-color: var(--pf-accent); }
+    #mcwalk-userscript .app-icon:active { box-shadow: var(--pf-shadow-pressed); }
     #mcwalk-userscript .app-icon canvas { display: block; width: 100%; height: 100%; pointer-events: none; user-select: none; }
     #mcwalk-userscript[data-state=off] .app-icon canvas { filter: grayscale(.65) brightness(.72); }
     #mcwalk-userscript[data-dragging=true] .app-icon { cursor: grabbing; }
     #mcwalk-userscript .quick-actions {
       display: none; position: absolute; top: 50%; left: calc(100% + 8px);
-      align-items: center; gap: 6px; transform: translateY(-50%); white-space: nowrap;
+      align-items: center; gap: 2px; padding: 4px; border: 1px solid var(--pf-glass-border); border-radius: 999px;
+      background: rgba(255, 255, 255, .5); box-shadow: var(--pf-shadow-chrome);
+      -webkit-backdrop-filter: blur(12px) saturate(1.6); backdrop-filter: blur(12px) saturate(1.6);
+      transform: translateY(-50%); white-space: nowrap;
     }
-    #mcwalk-userscript[data-menu-open=true] .quick-actions { display: flex; }
+    #mcwalk-userscript[data-menu-open=true] .quick-actions { display: flex; animation: pf-quick-in .18s cubic-bezier(.2, .8, .2, 1) both; }
     #mcwalk-userscript[data-menu-align=left] .quick-actions { right: calc(100% + 8px); left: auto; }
+    #mcwalk-userscript[data-menu-open=true][data-menu-align=left] .quick-actions { animation-name: pf-quick-in-left; }
     #mcwalk-userscript .quick-action {
-      min-height: 38px; padding: 0 11px; border: 1px solid var(--line-strong);
-      border-radius: 5px; background: var(--bg); color: var(--ink-dim);
-      box-shadow: 0 3px 9px rgba(0,0,0,.36); cursor: pointer;
+      min-height: 32px; padding: 0 12px; border: 1px solid transparent;
+      border-radius: 999px; background: transparent; color: var(--pf-text-2);
+      box-shadow: none; cursor: pointer;
+      transition: background .16s ease, color .16s ease, box-shadow .16s ease;
     }
-    #mcwalk-userscript .quick-action:hover, #mcwalk-userscript .quick-action[aria-expanded=true] {
-      border-color: var(--accent); color: var(--ink); background: var(--chip);
+    #mcwalk-userscript .quick-action:hover { color: var(--pf-text); background: rgba(255, 255, 255, .58); }
+    #mcwalk-userscript .quick-action[aria-expanded=true] {
+      color: var(--pf-accent-ink); background: #fff; box-shadow: 0 2px 6px rgba(25, 35, 55, .14);
     }
+    #mcwalk-userscript .quick-action:active { background: rgba(255, 255, 255, .72); box-shadow: var(--pf-shadow-pressed); }
     #mcwalk-userscript .toggle { display: flex; align-items: center; gap: 7px; }
-    #mcwalk-userscript .onoff { min-width: 28px; color: var(--accent-bright); font: 700 11px/1 ui-monospace, Consolas, monospace; }
-    #mcwalk-userscript[data-state=off] .onoff { color: var(--ink-faint); }
-    #mcwalk-userscript .camera, #mcwalk-userscript .settings { font-size: 12px; font-weight: 600; }
-    #mcwalk-userscript[data-camera-recording=true] .camera { border-color: var(--bad); color: #ef9d91; background: #3a221f; }
+    #mcwalk-userscript .onoff { min-width: 28px; color: var(--pf-accent-ink); font: 700 11px/1 ui-monospace, Consolas, monospace; }
+    #mcwalk-userscript[data-state=off] .onoff { color: var(--pf-text-3); }
+    #mcwalk-userscript .camera, #mcwalk-userscript .settings { font-size: 13px; font-weight: 600; }
+    #mcwalk-userscript[data-camera-recording=true] .camera { color: #fff; background: var(--pf-bad); }
   
     /* パネル（ポップアップ） */
     #mcwalk-userscript .panel {
-      display: none; position: absolute; top: calc(100% + 10px); left: 0; width: min(340px, calc(100vw - 16px));
-      max-height: calc(100vh - 72px); overflow: auto; margin: 0; padding: 16px; border: 1px solid var(--line-strong);
-      border-radius: 4px; background: var(--panel); box-shadow: 0 6px 18px rgba(0,0,0,.46);
+      --pf-panel-pad: 20px; --pf-panel-radius: 18px;
+      display: none; position: absolute; top: calc(100% + 10px); left: 0; width: min(420px, calc(100vw - 32px));
+      max-height: calc(100dvh - 32px); overflow: auto; isolation: isolate; margin: 0; padding: var(--pf-panel-pad); border: 1px solid rgba(255, 255, 255, .8);
+      border-radius: var(--pf-panel-radius); background: var(--pf-panel-fill); color: var(--pf-text); box-shadow: var(--pf-shadow-modal);
+      -webkit-backdrop-filter: blur(12px) saturate(1.6); backdrop-filter: blur(12px) saturate(1.6);
+      scrollbar-color: rgba(32, 41, 58, .24) transparent; scrollbar-width: thin;
     }
-    #mcwalk-userscript[data-open=true] .panel { display: block; }
+    #mcwalk-userscript[data-open=true] .panel { display: block; animation: pf-panel-down-in .2s cubic-bezier(.2, .8, .2, 1) both; }
     #mcwalk-userscript[data-panel-align=right] .panel { right: 0; left: auto; }
-    #mcwalk-userscript[data-panel-vertical=up] .panel { top: auto; bottom: calc(100% + 12px); }
+    #mcwalk-userscript[data-panel-vertical=up] .panel { top: auto; bottom: calc(100% + 12px); animation-name: pf-panel-up-in; }
     #mcwalk-userscript[data-panel-section=camera] .settings-view, #mcwalk-userscript[data-panel-section=settings] .camera-view { display: none; }
-    #mcwalk-userscript .sep { margin: 16px 0; height: 1px; background: var(--line-soft); border: 0; }
+    #mcwalk-userscript[data-panel-section=camera] .camera-view, #mcwalk-userscript[data-panel-section=settings] .settings-view { animation: pf-content-in .16s ease-out both; }
+    #mcwalk-userscript .sep { margin: 14px 0; height: 1px; background: var(--pf-divider); border: 0; }
     /* フォーム要素のレイアウト */
-    #mcwalk-userscript label, #mcwalk-userscript .state-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    #mcwalk-userscript label:last-child { margin-bottom: 0; }
-    #mcwalk-userscript label > span:first-child { color: var(--ink-dim); font-size: 12px; font-weight: 600; }
-    #mcwalk-userscript .state-row { margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
-    #mcwalk-userscript .state { color: var(--accent-bright); font-size: 11px; font-weight: 700; letter-spacing: 0.05em; }
-    #mcwalk-userscript[data-state=flying] .state { color: var(--warn); }
-    /* OS標準に近いチェックボックス */
-    #mcwalk-userscript input[type=checkbox] {
-      appearance: auto; -webkit-appearance: checkbox; width: 17px; height: 17px;
-      margin: 0; accent-color: var(--accent); cursor: pointer;
+    #mcwalk-userscript label, #mcwalk-userscript .state-row {
+      display: flex; justify-content: space-between; align-items: center; min-height: 40px;
+      margin: 0 0 2px; padding: 0 11px; border-radius: 10px;
+      transition: background .16s ease;
     }
+    #mcwalk-userscript label:hover { background: var(--pf-row-hover); }
+    #mcwalk-userscript label:last-child { margin-bottom: 0; }
+    #mcwalk-userscript label > span:first-child { color: var(--pf-text); font-size: 13px; font-weight: 500; }
+    #mcwalk-userscript .state-row {
+      position: sticky; top: calc(-1 * var(--pf-panel-pad)); z-index: 2; min-height: 66px;
+      margin: calc(-1 * var(--pf-panel-pad)) calc(-1 * var(--pf-panel-pad)) 12px;
+      padding: 14px var(--pf-panel-pad) 11px; border-bottom: 1px solid var(--pf-divider);
+      border-radius: var(--pf-panel-radius) var(--pf-panel-radius) 0 0; background: rgba(255, 255, 255, .96);
+    }
+    #mcwalk-userscript .state-row > span:first-child { color: var(--pf-text); font-size: 16px; font-weight: 700; letter-spacing: -.02em; }
+    #mcwalk-userscript .state, #mcwalk-userscript .camera-state { color: var(--pf-accent-ink); font-size: 11px; font-weight: 700; }
+    #mcwalk-userscript[data-state=flying] .state { color: var(--pf-warn); }
+    /* 3place本体と同じピル型スイッチ */
+    #mcwalk-userscript input[type=checkbox] {
+      position: relative; appearance: none; -webkit-appearance: none; width: 34px; height: 20px;
+      flex: 0 0 34px; margin: 0; border: 0; border-radius: 999px;
+      background: rgba(32, 41, 58, .18); cursor: pointer; transition: background .16s ease;
+    }
+    #mcwalk-userscript input[type=checkbox]::before {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+      border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(20, 30, 55, .24);
+      transition: transform .16s ease;
+    }
+    #mcwalk-userscript input[type=checkbox]:checked { background: var(--pf-accent); }
+    #mcwalk-userscript input[type=checkbox]:checked::before { transform: translateX(14px); }
   
     /* セレクトボックス */
     #mcwalk-userscript select {
-      min-width: 120px; padding: 5px 7px; border: 1px solid var(--line-strong); border-radius: 2px;
-      color: var(--ink); background: var(--chip); font-size: 12px; cursor: pointer; outline: none;
+      min-width: 122px; height: 30px; padding: 0 28px 0 9px; border: 1px solid var(--pf-control-border); border-radius: 9px;
+      color: var(--pf-text); background: #fff; font: 500 13px/1 "Space Grotesk", system-ui, sans-serif; cursor: pointer; outline: none;
     }
-    #mcwalk-userscript select:hover { border-color: var(--accent); }
+    #mcwalk-userscript select:hover { border-color: color-mix(in srgb, var(--pf-accent) 55%, transparent); }
   
     /* スライダー（Range） */
-    #mcwalk-userscript .range { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 16px; }
+    #mcwalk-userscript .range {
+      display: grid; grid-template-columns: 1fr auto; gap: 7px 8px; min-height: 52px;
+      margin: 0 0 2px; padding: 8px 11px; border-radius: 10px; transition: background .16s ease;
+    }
+    #mcwalk-userscript .range:hover { background: var(--pf-row-hover); }
     #mcwalk-userscript .range span { grid-column: 1 / 2; }
-    #mcwalk-userscript output { grid-column: 2 / 3; color: var(--accent-bright); font: 700 12px ui-monospace, Consolas, monospace; text-align: right; }
+    #mcwalk-userscript output { grid-column: 2 / 3; color: var(--pf-accent-ink); font: 700 11px ui-monospace, Consolas, monospace; text-align: right; }
     #mcwalk-userscript input[type=range] {
       grid-column: 1 / -1; appearance: none; -webkit-appearance: none; width: 100%; height: 4px;
-      background: var(--line-strong); border-radius: 2px; outline: none; margin-top: 4px;
+      background: rgba(32, 41, 58, .18); border-radius: 999px; outline: none; margin: 2px 0 0;
     }
     #mcwalk-userscript input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent);
-      cursor: pointer;
+      -webkit-appearance: none; width: 16px; height: 16px; border: 2px solid #fff; border-radius: 50%;
+      background: var(--pf-accent); box-shadow: 0 1px 4px rgba(20, 30, 55, .24); cursor: pointer;
     }
+    #mcwalk-userscript input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border: 2px solid #fff; border-radius: 50%; background: var(--pf-accent); cursor: pointer; }
   
     /* 各種ボタン */
     #mcwalk-userscript .reload, #mcwalk-userscript .camera-crop-row button, #mcwalk-userscript .camera-actions button, #mcwalk-userscript .fov-reset {
-      border: 1px solid var(--line-strong); border-radius: 4px; color: var(--ink); background: var(--chip); cursor: pointer; padding: 8px 12px; font-size: 12px; font-weight: 600;
+      min-height: 36px; border: 1px solid var(--pf-control-border); border-radius: 10px; color: var(--pf-text); background: #fff;
+      box-shadow: 0 2px 6px rgba(25, 35, 55, .08); cursor: pointer; padding: 0 13px; font-size: 13px; font-weight: 600;
+      transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
     }
     #mcwalk-userscript .reload:hover, #mcwalk-userscript .camera-crop-row button:hover:not(:disabled), #mcwalk-userscript .camera-actions button:hover:not(:disabled), #mcwalk-userscript .fov-reset:hover:not(:disabled) {
-      border-color: var(--accent); background: var(--line-soft);
+      border-color: color-mix(in srgb, var(--pf-accent) 45%, transparent); color: var(--pf-accent-ink); background: var(--pf-glass-hover);
     }
-    #mcwalk-userscript .camera-crop-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; margin-bottom: 12px; }
+    #mcwalk-userscript .reload:active, #mcwalk-userscript .camera-crop-row button:active:not(:disabled), #mcwalk-userscript .camera-actions button:active:not(:disabled), #mcwalk-userscript .fov-reset:active:not(:disabled) { background: #f2f5f6; box-shadow: none; }
+    #mcwalk-userscript .camera-crop-row {
+      display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;
+      margin: 0 0 10px; padding: 8px 11px; border-radius: 10px; transition: background .16s ease;
+    }
+    #mcwalk-userscript .camera-crop-row:hover { background: var(--pf-row-hover); }
     #mcwalk-userscript .camera-crop-row button { grid-column: 1 / -1; }
     #mcwalk-userscript .camera-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
-    #mcwalk-userscript[data-camera-recording=true] .camera-record { border-color: var(--bad); color: #fff; background: var(--bad); }
+    #mcwalk-userscript .camera-photo { border-color: transparent !important; color: #fff !important; background: var(--pf-accent-ink) !important; }
+    #mcwalk-userscript .camera-photo:hover:not(:disabled) { color: #fff !important; filter: brightness(.96); }
+    #mcwalk-userscript[data-camera-recording=true] .camera-record { border-color: var(--pf-bad); color: #fff; background: var(--pf-bad); }
   
     /* その他テキスト、折りたたみメニュー */
-    #mcwalk-userscript p { margin: 12px 0 0; color: var(--ink-dim); font-size: 11px; line-height: 1.5; }
-    #mcwalk-userscript details { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
-    #mcwalk-userscript summary { display: flex; align-items: center; justify-content: space-between; color: var(--ink-dim); font-size: 12px; font-weight: 600; cursor: pointer; list-style: none; user-select: none; }
+    #mcwalk-userscript p { margin: 10px 0 0; color: var(--pf-text-2); font-size: 11px; line-height: 1.55; }
+    #mcwalk-userscript details { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--pf-divider); }
+    #mcwalk-userscript summary { display: flex; align-items: center; justify-content: space-between; min-height: 32px; color: var(--pf-text-2); font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; user-select: none; }
     #mcwalk-userscript summary::-webkit-details-marker { display: none; }
-    #mcwalk-userscript summary::after { content: "+"; font-family: monospace; font-size: 14px; color: var(--ink-faint); }
-    #mcwalk-userscript details[open] summary::after { content: "–"; }
-    #mcwalk-userscript summary:hover { color: var(--ink); }
-    #mcwalk-userscript .compat-summary { color: var(--ink-faint); font: 600 11px/1 ui-monospace, Consolas, monospace; }
+    #mcwalk-userscript summary::after { content: "+"; font-size: 16px; font-weight: 400; color: var(--pf-text-3); }
+    #mcwalk-userscript details[open] summary::after { content: "−"; }
+    #mcwalk-userscript summary:hover { color: var(--pf-accent-ink); }
+    #mcwalk-userscript .compat-summary { margin-left: auto; margin-right: 8px; color: var(--pf-text-3); font: 600 11px/1 ui-monospace, Consolas, monospace; }
     #mcwalk-userscript .compat-grid { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; margin-top: 12px; font-size: 11px; }
-    #mcwalk-userscript .compat-grid span:nth-child(odd) { color: var(--ink-dim); }
+    #mcwalk-userscript .compat-grid span:nth-child(odd) { color: var(--pf-text-2); }
     #mcwalk-userscript .compat-grid span:nth-child(even) { font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-align: right; }
-    #mcwalk-userscript [data-level=ok] { color: var(--accent-bright) !important; }
-    #mcwalk-userscript [data-level=error] { color: var(--bad) !important; }
-    #mcwalk-userscript .reload-row { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line-soft); }
-    #mcwalk-userscript .note { color: var(--warn); font-size: 11px; font-weight: 600; }
+    #mcwalk-userscript [data-level=ok] { color: var(--pf-accent-ink) !important; }
+    #mcwalk-userscript [data-level=error] { color: var(--pf-bad) !important; }
+    #mcwalk-userscript .reload-row { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--pf-divider); }
+    #mcwalk-userscript .note { color: var(--pf-warn); font-size: 11px; font-weight: 600; }
+    #mcwalk-userscript button:focus-visible, #mcwalk-userscript select:focus-visible, #mcwalk-userscript input:focus-visible, #mcwalk-userscript summary:focus-visible {
+      outline: 2px solid var(--pf-accent); outline-offset: 2px;
+    }
+    #mcwalk-userscript button:disabled, #mcwalk-userscript select:disabled, #mcwalk-userscript input:disabled {
+      opacity: .46; cursor: not-allowed; transform: none !important; box-shadow: none;
+    }
 
     /* Capture-area selector. It lives outside #mcwalk-userscript so it needs
        its own complete positioning and control styles. */
     #pathfinder-camera-crop, #pathfinder-camera-crop * { box-sizing: border-box; }
     #pathfinder-camera-crop {
       position: fixed; inset: 0; z-index: 2147483646; overflow: hidden;
-      color: #efe9dc; font: 600 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text, #20293a); font: 600 13px/1.4 "Space Grotesk", system-ui, sans-serif;
       user-select: none; touch-action: none;
     }
     #pathfinder-camera-crop .crop-box {
-      position: fixed; min-width: 1px; min-height: 1px; border: 2px solid #53c9ef;
-      background: rgba(83, 201, 239, .04);
-      box-shadow: 0 0 0 9999px rgba(4, 6, 11, .62), 0 0 16px rgba(83, 201, 239, .7);
+      position: fixed; min-width: 1px; min-height: 1px; border: 2px solid var(--accent, #0d9488);
+      background: var(--accent-tint, rgba(13, 148, 136, .08));
+      box-shadow: 0 0 0 9999px rgba(16, 19, 24, .58), 0 0 0 4px var(--accent-tint, rgba(13, 148, 136, .14));
       cursor: move; touch-action: none;
     }
     #pathfinder-camera-crop .crop-box::before {
@@ -1103,54 +1168,70 @@ export const installPathfinderApp = () => {
     #pathfinder-camera-crop .crop-toolbar {
       position: fixed; top: max(12px, env(safe-area-inset-top)); left: 50%;
       display: flex; align-items: center; gap: 6px; max-width: calc(100vw - 24px);
-      padding: 7px; border: 1px solid #59503f; border-radius: 5px;
-      background: #1d1b17; box-shadow: 0 4px 16px rgba(0, 0, 0, .52);
+      padding: 6px; border: 1px solid var(--glass-border, rgba(255, 255, 255, .7)); border-radius: 18px;
+      background: rgba(255, 255, 255, .94); box-shadow: var(--shadow-raised, 0 14px 34px rgba(25, 35, 55, .26));
+      -webkit-backdrop-filter: blur(12px) saturate(1.6); backdrop-filter: blur(12px) saturate(1.6);
       transform: translateX(-50%); cursor: default; white-space: nowrap;
     }
-    #pathfinder-camera-crop .crop-toolbar span { margin: 0 4px 0 2px; color: #dcb06a; }
+    #pathfinder-camera-crop .crop-toolbar span { margin: 0 6px; color: var(--accent-ink, #0b6e66); }
     #pathfinder-camera-crop .crop-toolbar button {
-      min-height: 30px; padding: 5px 9px; border: 1px solid #59503f; border-radius: 4px;
-      color: #efe9dc; background: #2b2822; font: inherit; cursor: pointer;
+      min-height: 32px; padding: 0 12px; border: 1px solid rgba(20, 30, 50, .16); border-radius: 10px;
+      color: var(--text, #20293a); background: #fff; font: inherit; cursor: pointer;
     }
     #pathfinder-camera-crop .crop-toolbar button:hover,
     #pathfinder-camera-crop .crop-toolbar button:focus-visible {
-      border-color: #c99a4a; background: #302c25; outline: none;
+      border-color: var(--accent, #0d9488); color: var(--accent-ink, #0b6e66); background: var(--glass-fill-hover, rgba(255, 255, 255, .9)); outline: none;
     }
+    #pathfinder-camera-crop .crop-toolbar button:focus-visible { outline: 2px solid var(--accent, #0d9488); outline-offset: 2px; }
     #pathfinder-camera-crop .crop-resize {
       position: absolute; right: 6px; bottom: 6px; width: 24px; height: 24px;
-      border-right: 5px solid #53c9ef; border-bottom: 5px solid #53c9ef;
-      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .8)); cursor: nwse-resize; touch-action: none;
+      border-right: 5px solid var(--accent, #0d9488); border-bottom: 5px solid var(--accent, #0d9488);
+      filter: drop-shadow(0 1px 2px rgba(20, 30, 55, .34)); cursor: nwse-resize; touch-action: none;
     }
 
     @media (max-width: 520px) {
       #pathfinder-camera-crop .crop-toolbar { flex-wrap: wrap; justify-content: center; white-space: normal; }
       #pathfinder-camera-crop .crop-toolbar span { flex-basis: 100%; text-align: center; }
+      #mcwalk-userscript .panel { --pf-panel-pad: 16px; --pf-panel-radius: 16px; width: calc(100vw - 32px); }
+      #mcwalk-userscript .camera-actions { grid-template-columns: 1fr; }
+      #mcwalk-userscript .quick-action { min-height: 36px; padding: 0 11px; }
     }
   
     /* 一般設定: 装飾カードではなく区切り線中心のツール画面 */
     #mcwalk-userscript .settings-header {
-      display: flex; align-items: center; justify-content: space-between;
-      margin: -16px -16px 14px; padding: 11px 14px; border-bottom: 1px solid var(--line);
-      background: var(--bg);
+      position: sticky; top: calc(-1 * var(--pf-panel-pad)); z-index: 2;
+      display: flex; align-items: center; justify-content: space-between; min-height: 66px;
+      margin: calc(-1 * var(--pf-panel-pad)) calc(-1 * var(--pf-panel-pad)) 12px;
+      padding: 14px var(--pf-panel-pad) 11px; border-bottom: 1px solid var(--pf-divider);
+      border-radius: var(--pf-panel-radius) var(--pf-panel-radius) 0 0; background: rgba(255, 255, 255, .96);
     }
-    #mcwalk-userscript .settings-header strong { display: block; color: var(--ink); font-size: 13px; font-weight: 650; }
-    #mcwalk-userscript .settings-header small { display: block; margin-top: 1px; color: var(--ink-faint); font: 10px/1.3 ui-monospace, Consolas, monospace; }
+    #mcwalk-userscript .settings-header strong { display: block; color: var(--pf-text); font-size: 16px; font-weight: 700; letter-spacing: -.02em; }
+    #mcwalk-userscript .settings-header small { display: block; margin-top: 2px; color: var(--pf-text-3); font: 11px/1.3 ui-monospace, Consolas, monospace; }
     #mcwalk-userscript .settings-group { margin: 0; padding: 0 0 4px; }
-    #mcwalk-userscript .settings-group + .settings-group { margin-top: 11px; padding-top: 13px; border-top: 1px solid var(--line-soft); }
+    #mcwalk-userscript .settings-group + .settings-group { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--pf-divider); }
     #mcwalk-userscript .settings-group h3 {
-      margin: 0 0 10px; color: var(--ink); font-size: 11px; font-weight: 700;
-      letter-spacing: .08em;
+      margin: 0 11px 5px; color: var(--pf-text-3); font-size: 11px; font-weight: 650;
+      letter-spacing: 0;
     }
-    #mcwalk-userscript .settings-view label { min-height: 26px; margin-bottom: 9px; }
-    #mcwalk-userscript .settings-view .range { margin-bottom: 12px; }
-    #mcwalk-userscript .settings-view .range:last-child { margin-bottom: 2px; }
-    #mcwalk-userscript .setting-action-row { grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-top: 1px; }
-    #mcwalk-userscript .setting-note { margin: 6px 0 4px; color: var(--ink-faint); }
-    #mcwalk-userscript .settings-help, #mcwalk-userscript .settings-view .compatibility { margin-top: 13px; padding-top: 11px; }
-    #mcwalk-userscript .shortcut-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; margin-top: 10px; color: var(--ink-dim); font-size: 11px; }
+    #mcwalk-userscript .settings-view label { min-height: 40px; margin-bottom: 2px; }
+    #mcwalk-userscript .settings-view .range { margin-bottom: 2px; }
+    #mcwalk-userscript .settings-view .range:last-child { margin-bottom: 0; }
+    #mcwalk-userscript .setting-action-row { grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-top: 2px; }
+    #mcwalk-userscript .setting-action-row .fov-reset { min-height: 30px; }
+    #mcwalk-userscript .setting-note { margin: 3px 11px 6px; color: var(--pf-text-3); }
+    #mcwalk-userscript .settings-help, #mcwalk-userscript .settings-view .compatibility { margin-top: 12px; padding-top: 10px; }
+    #mcwalk-userscript .shortcut-grid { display: grid; grid-template-columns: auto 1fr; gap: 7px 10px; margin-top: 10px; color: var(--pf-text-2); font-size: 11px; }
     #mcwalk-userscript .shortcut-grid kbd {
-      min-width: 66px; padding: 2px 5px; border: 1px solid var(--line-strong); border-radius: 2px;
-      color: var(--ink); background: var(--bg); font: 10px/1.4 ui-monospace, Consolas, monospace; text-align: center;
+      min-width: 66px; padding: 3px 6px; border: 1px solid var(--pf-control-border); border-radius: 7px;
+      color: var(--pf-text); background: #fff; box-shadow: 0 1px 2px rgba(25, 35, 55, .08); font: 11px/1.4 ui-monospace, Consolas, monospace; text-align: center;
+    }
+    @keyframes pf-quick-in { from { opacity: 0; transform: translate(-6px, -50%); } to { opacity: 1; transform: translate(0, -50%); } }
+    @keyframes pf-quick-in-left { from { opacity: 0; transform: translate(6px, -50%); } to { opacity: 1; transform: translate(0, -50%); } }
+    @keyframes pf-panel-down-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pf-panel-up-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pf-content-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    @media (prefers-reduced-motion: reduce) {
+      #mcwalk-userscript *, #pathfinder-camera-crop * { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
     }
   `;
   const addStyle = () => {
@@ -1317,19 +1398,19 @@ export const installPathfinderApp = () => {
     root.dataset.panelSection = "settings";
     root.innerHTML = `
       <div class="launcher">
-        <button class="app-icon drag" type="button" aria-label="${tr("3place Pathfinderメニュー", "3place Pathfinder menu")}" aria-expanded="false" title="${tr("クリック: メニュー / ドラッグ: 移動", "Click: menu / Drag: move")}">
+        <button class="app-icon drag" type="button" aria-label="${tr("3place Pathfinderメニュー", "3place Pathfinder menu")}" aria-controls="pathfinder-quick-actions" aria-expanded="false" title="${tr("クリック: メニュー / ドラッグ: 移動", "Click: menu / Drag: move")}">
           <canvas width="40" height="40" aria-hidden="true"></canvas>
         </button>
-        <div class="quick-actions" aria-hidden="true">
+        <div id="pathfinder-quick-actions" class="quick-actions" aria-hidden="true">
           <button class="quick-action toggle" type="button" title="${tr("3place PathfinderをON/OFF", "Turn 3place Pathfinder on/off")}">
             <span>${tr("機能", "Features")}</span><span class="onoff">ON</span>
           </button>
-          <button class="quick-action camera" type="button" aria-expanded="false">${tr("カメラ設定", "Camera")}</button>
-          <button class="quick-action settings" type="button" aria-expanded="false">${tr("一般設定", "General")}</button>
+          <button class="quick-action camera" type="button" aria-controls="pathfinder-panel" aria-expanded="false">${tr("カメラ設定", "Camera")}</button>
+          <button class="quick-action settings" type="button" aria-controls="pathfinder-panel" aria-expanded="false">${tr("一般設定", "General")}</button>
         </div>
       </div>
   
-      <section class="panel">
+      <section id="pathfinder-panel" class="panel" role="region" aria-label="3place Pathfinder">
         <!-- カメラビュー -->
         <div class="camera-view">
           <div class="state-row">
@@ -1546,6 +1627,20 @@ export const installPathfinderApp = () => {
           !cameraCropOverlay
         ) {
           setLauncherMenu(false);
+        }
+      },
+      true,
+    );
+    addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          event.key === "Escape" &&
+          root.dataset.menuOpen === "true" &&
+          !cameraCropOverlay
+        ) {
+          setLauncherMenu(false);
+          widget.launcher.focus({ preventScroll: true });
         }
       },
       true,
