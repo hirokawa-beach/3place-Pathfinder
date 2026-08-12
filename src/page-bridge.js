@@ -91,6 +91,7 @@ export const installPageBridge = () => {
     DOWNLOAD_URL_REVOKE_MS: 30000,
     BASEMAP_CAPTURE_TIMEOUT_MS: 30000,
     BASEMAP_FOV_VERIFY_INTERVAL_MS: 1000,
+    CAMERA_BASEMAP_RENDER_TIMEOUT_MS: 250,
     THIRD_PERSON_COLLISION_SCAN_INTERVAL_MS: 1000,
   });
   const THIRD_PERSON_COLLISION = Object.freeze({
@@ -2250,7 +2251,7 @@ export const installPageBridge = () => {
   const cameraLayerCanvases = () => {
     const streetCanvas = cameraCanvas();
     const layers = [
-      ...document.querySelectorAll("#mapWrap canvas"),
+      ...document.querySelectorAll(".space-backdrop, #mapWrap canvas"),
       streetCanvas,
     ];
     return [...new Set(layers)].filter(
@@ -2439,8 +2440,9 @@ export const installPageBridge = () => {
     const gap = Math.round(8 * scale);
     const pillHeight = fontSize + padY * 2;
     const y = height - margin - pillHeight;
-    const brand = "3place";
-    const unofficialCredit = "recording by Pathfinder(unofficial)";
+    const brand = "3place.world";
+    const unofficialCredit =
+      "recording by 3place Pathfinder(unofficial)";
     const showUnofficialCredit =
       document.documentElement?.dataset
         .pathfinderCameraUnofficialCredit !== "false";
@@ -2516,8 +2518,6 @@ export const installPageBridge = () => {
       );
     }
     const context = cameraOutputContext;
-    const streetRect = streetCanvas.getBoundingClientRect();
-    const hasStreetRect = streetRect.width > 0 && streetRect.height > 0;
     context.save();
     try {
       context.setTransform(1, 0, 0, 1, 0, 0);
@@ -2530,36 +2530,30 @@ export const installPageBridge = () => {
       for (const layer of cameraLayerCanvases()) {
         const opacity = cameraLayerOpacity(layer);
         if (opacity <= 0.001) continue;
-        const rect = layer.getBoundingClientRect();
-        let x = -metrics.left;
-        let y = -metrics.top;
-        let width = metrics.sourceWidth;
-        let height = metrics.sourceHeight;
-        if (hasStreetRect && rect.width > 0 && rect.height > 0) {
-          x =
-            ((rect.left - streetRect.left) / streetRect.width) *
-              metrics.sourceWidth -
-            metrics.left;
-          y =
-            ((rect.top - streetRect.top) / streetRect.height) *
-              metrics.sourceHeight -
-            metrics.top;
-          width =
-            (rect.width / streetRect.width) * metrics.sourceWidth;
-          height =
-            (rect.height / streetRect.height) * metrics.sourceHeight;
-        }
+        // Every capture layer covers the same viewport, but 3place may give
+        // each canvas a different backing resolution and CSS rectangle. In
+        // particular, the high-DPI space backdrop reports its intrinsic size
+        // as its layout size. Crop each backing buffer by the shared viewport
+        // ratios instead of projecting those incompatible CSS rectangles.
+        const sourceX =
+          (metrics.left / metrics.sourceWidth) * layer.width;
+        const sourceY =
+          (metrics.top / metrics.sourceHeight) * layer.height;
+        const sourceWidth =
+          (metrics.width / metrics.sourceWidth) * layer.width;
+        const sourceHeight =
+          (metrics.height / metrics.sourceHeight) * layer.height;
         context.globalAlpha = Math.min(1, opacity);
         context.drawImage(
           layer,
+          sourceX,
+          sourceY,
+          sourceWidth,
+          sourceHeight,
           0,
           0,
-          layer.width,
-          layer.height,
-          x,
-          y,
-          width,
-          height,
+          output.width,
+          output.height,
         );
       }
       drawCameraCredits(context, output.width, output.height);
@@ -2650,6 +2644,10 @@ export const installPageBridge = () => {
       HOOK_TIMING.DOWNLOAD_URL_REVOKE_MS,
     );
   };
+  const renderStreetCameraFrame = () => {
+    streetRenderer.render(streetScene, streetCamera);
+    return composeCameraFrame();
+  };
   const renderCameraFrame = () => {
     if (!cameraAvailable()) {
       throw new Error(
@@ -2659,8 +2657,41 @@ export const installPageBridge = () => {
         ),
       );
     }
-    streetRenderer.render(streetScene, streetCamera);
-    return composeCameraFrame();
+    // MapLibre clears its WebGL drawing buffer after presenting a frame.
+    // Compose inside its next render event so the ocean/sky pixels are still
+    // readable, then refresh Three.js immediately before drawing that layer.
+    if (
+      typeof basemap?.once !== "function" ||
+      typeof basemap?.triggerRepaint !== "function"
+    ) {
+      return Promise.resolve(renderStreetCameraFrame());
+    }
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timeout = 0;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (timeout) clearTimeout(timeout);
+        try {
+          resolve(renderStreetCameraFrame());
+        } catch (error) {
+          reject(error);
+        }
+      };
+      const onRender = () => finish();
+      basemap.once("render", onRender);
+      timeout = window.setTimeout(() => {
+        basemap?.off?.("render", onRender);
+        finish();
+      }, HOOK_TIMING.CAMERA_BASEMAP_RENDER_TIMEOUT_MS);
+      try {
+        basemap.triggerRepaint();
+      } catch {
+        basemap?.off?.("render", onRender);
+        finish();
+      }
+    });
   };
   const captureCameraPhoto = async () => {
     if (cameraRecorder) {
@@ -2673,7 +2704,7 @@ export const installPageBridge = () => {
     }
     announceCameraState("photo");
     try {
-      const canvas = renderCameraFrame();
+      const canvas = await renderCameraFrame();
       const blob = await new Promise((resolve, reject) => {
         canvas.toBlob(
           (result) =>
@@ -2712,7 +2743,8 @@ export const installPageBridge = () => {
     cameraPumpFrame = 0;
     cameraPumpLast = 0;
   };
-  const pumpCameraRecording = (time) => {
+  const pumpCameraRecording = async (time) => {
+    cameraPumpFrame = 0;
     if (cameraRecorder?.state !== "recording") {
       stopCameraPump();
       return;
@@ -2720,7 +2752,7 @@ export const installPageBridge = () => {
     if (time - cameraPumpLast >= 1000 / 30 - 1) {
       cameraPumpLast = time;
       try {
-        renderCameraFrame();
+        await renderCameraFrame();
       } catch (error) {
         cameraFailure =
           error instanceof Error
@@ -2734,9 +2766,11 @@ export const installPageBridge = () => {
         return;
       }
     }
-    cameraPumpFrame = requestAnimationFrame(pumpCameraRecording);
+    if (cameraRecorder?.state === "recording") {
+      cameraPumpFrame = requestAnimationFrame(pumpCameraRecording);
+    }
   };
-  const startCameraRecording = () => {
+  const startCameraRecording = async () => {
     if (cameraRecorder) return cameraState();
     if (typeof MediaRecorder !== "function") {
       const error = new Error(
@@ -2749,7 +2783,7 @@ export const installPageBridge = () => {
       throw error;
     }
     try {
-      const canvas = renderCameraFrame();
+      const canvas = await renderCameraFrame();
       if (typeof canvas.captureStream !== "function") {
         throw new Error(
           tr(
