@@ -4,10 +4,10 @@
 
 **Camera controls, dynamic lighting, capture tools, and first-person conveniences for [3place](https://3place.world/).**
 
-[![Userscript v1.2.2](https://img.shields.io/badge/userscript-v1.2.2-2ea44f)](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.2.user.js)
+[![Userscript v1.2.3](https://img.shields.io/badge/userscript-v1.2.3-2ea44f)](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.3.user.js)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[Install userscript](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.2.user.js) · [Features](#features) · [Third-person](#third-person-view) · [Controls](#controls) · [Development](#development) · [日本語](#日本語の概要)
+[Install userscript](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.3.user.js) · [Features](#features) · [Third-person](#third-person-view) · [Controls](#controls) · [Development](#development) · [日本語](#日本語の概要)
 
 </div>
 
@@ -55,6 +55,7 @@ Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 ### Interface
 
 - Movable on-screen launcher and settings panel
+- Quality, balanced, and performance profiles for Pathfinder-only rendering costs without changing 3place's official graphics settings
 - Japanese and English Pathfinder UI with automatic browser-language detection
 - Built-in compatibility diagnostics for 3place updates
 - Persistent settings stored locally in the browser
@@ -73,11 +74,11 @@ Pathfinder's third-person camera runs on top of an active 3place first-person se
 ## Installation
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) in Chrome, Edge, or Firefox.
-2. Click **[Install 3place Pathfinder](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.2.user.js)**.
+2. Click **[Install 3place Pathfinder](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.3.user.js)**.
 3. Confirm the installation in Tampermonkey.
 4. Reload [3place](https://3place.world/).
 
-Alternatively, open [`dist/3place-pathfinder-v1.2.2.user.js`](./dist/3place-pathfinder-v1.2.2.user.js), copy its contents into a new Tampermonkey script, and save it.
+Alternatively, open [`dist/3place-pathfinder-v1.2.3.user.js`](./dist/3place-pathfinder-v1.2.3.user.js), copy its contents into a new Tampermonkey script, and save it.
 
 ## Controls
 
