@@ -30,6 +30,7 @@ export const installPageBridge = () => {
   let avatarToolkitPromise = null;
   let mainModulePromise = null;
   let lastDarkNightScan = -Infinity;
+  let lastOtherLightSync = -Infinity;
   let rearCursorCanvas = null;
   let rearCursorCamera = null;
   let rearCursorX = Number.NaN;
@@ -100,6 +101,23 @@ export const installPageBridge = () => {
     SURFACE_CLEARANCE: 0.12,
     RETURN_SPEED_BLOCKS_PER_SECOND: 10,
     CAMERA_NEAR_PLANE: 0.02,
+  });
+  const GRAPHICS_PROFILES = Object.freeze({
+    quality: Object.freeze({
+      maxOtherPlayerLights: 12,
+      otherLightIntervalMs: 0,
+      thirdPersonCollision: true,
+    }),
+    balanced: Object.freeze({
+      maxOtherPlayerLights: 6,
+      otherLightIntervalMs: 50,
+      thirdPersonCollision: true,
+    }),
+    performance: Object.freeze({
+      maxOtherPlayerLights: 0,
+      otherLightIntervalMs: Number.POSITIVE_INFINITY,
+      thirdPersonCollision: false,
+    }),
   });
   
   // 02b. Pointer-lock and first-person FOV adapters
@@ -233,6 +251,11 @@ export const installPageBridge = () => {
   const enabled = (key, fallback = false) => {
     const value = document.documentElement?.dataset[key];
     return value === undefined ? fallback : value === "true";
+  };
+  const graphicsSettings = () => {
+    const profile =
+      document.documentElement?.dataset.pathfinderGraphicsProfile;
+    return GRAPHICS_PROFILES[profile] || GRAPHICS_PROFILES.quality;
   };
   const thirdPersonView = () => {
     const value =
@@ -1139,6 +1162,11 @@ export const installPageBridge = () => {
     record.light.dispose?.();
     otherLights.delete(key);
   };
+  const removeOtherLights = () => {
+    for (const [key, record] of [...otherLights]) {
+      removeOtherLight(key, record);
+    }
+  };
   const ensureOtherLight = (scene, key) => {
     const current = otherLights.get(key);
     if (current?.scene === scene) return current;
@@ -1166,6 +1194,11 @@ export const installPageBridge = () => {
     return record;
   };
   const syncOtherLights = (scene, camera) => {
+    const graphics = graphicsSettings();
+    if (graphics.maxOtherPlayerLights <= 0) {
+      removeOtherLights();
+      return;
+    }
     const on =
       enabled("mcwalkEnabled", enabled("mcwalkActive")) &&
       enabled("mcwalkHeadlight", true);
@@ -1178,6 +1211,14 @@ export const installPageBridge = () => {
       void ensureLight(scene);
       return;
     }
+    const syncNow = performance.now();
+    if (
+      syncNow - lastOtherLightSync <
+      graphics.otherLightIntervalMs
+    ) {
+      return;
+    }
+    lastOtherLightSync = syncNow;
     loadSelfUserId();
     const root = scene.getObjectByName("presence-avatars");
     if (!root) {
@@ -1212,7 +1253,11 @@ export const installPageBridge = () => {
     let activeCount = 0;
     for (const { avatar } of candidates) {
       if (
-        activeCount >= HOOK_LIMITS.MAX_OTHER_PLAYER_LIGHTS ||
+        activeCount >=
+          Math.min(
+            HOOK_LIMITS.MAX_OTHER_PLAYER_LIGHTS,
+            graphics.maxOtherPlayerLights,
+          ) ||
         avatar.name === exactSelfName ||
         avatar === fallbackSelf
       ) {
@@ -2188,16 +2233,20 @@ export const installPageBridge = () => {
           ),
         );
       }
-      effectiveDistance = settleThirdPersonCollisionDistance(
-        thirdPersonObstacleDistance(
-          scene,
-          camera,
-          focus,
-          viewDirection,
-          effectiveDistance,
-        ),
-        view,
-      );
+      if (graphicsSettings().thirdPersonCollision) {
+        effectiveDistance = settleThirdPersonCollisionDistance(
+          thirdPersonObstacleDistance(
+            scene,
+            camera,
+            focus,
+            viewDirection,
+            effectiveDistance,
+          ),
+          view,
+        );
+      } else {
+        resetThirdPersonCollisionDistance();
+      }
   
       if (
         !thirdPersonCamera ||
@@ -2897,7 +2946,9 @@ export const installPageBridge = () => {
       }
       syncFirstPersonFov(camera);
       syncRearCursorMode(renderer, camera);
-      syncDarkNightMaterials(scene);
+      if (enabled("pathfinderDarkNight")) {
+        syncDarkNightMaterials(scene);
+      }
       syncLight(scene, camera);
       syncOtherLights(scene, camera);
       return renderThirdPerson(this, original, scene, camera);

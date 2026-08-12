@@ -13,6 +13,11 @@ export const installPathfinderApp = () => {
   const VERSION = __PATHFINDER_VERSION__;
   const DEFAULT_FIRST_PERSON_FOV = 75;
   const DEFAULT_THIRD_PERSON_DISTANCE = 4.25;
+  const GRAPHICS_PROFILES = new Set([
+    "quality",
+    "balanced",
+    "performance",
+  ]);
   const UI_TIMING = Object.freeze({
     WALK_DOUBLE_TAP_DELAY_MS: 70,
     WALK_MODE_SETTLE_MS: 170,
@@ -83,6 +88,9 @@ export const installPathfinderApp = () => {
             ? Math.max(20, Math.min(160, Number(parsed.lightIntensity)))
             : 90,
           darkNight: parsed.darkNight === true,
+          graphicsProfile: GRAPHICS_PROFILES.has(parsed.graphicsProfile)
+            ? parsed.graphicsProfile
+            : "quality",
           firstPersonFov:
             parsed.firstPersonFov !== null &&
             parsed.firstPersonFov !== undefined &&
@@ -118,6 +126,7 @@ export const installPathfinderApp = () => {
       headlightEnabled: true,
       lightIntensity: 90,
       darkNight: false,
+      graphicsProfile: "quality",
       firstPersonFov: null,
       thirdPersonView: "off",
       thirdPersonDistance: DEFAULT_THIRD_PERSON_DISTANCE,
@@ -713,6 +722,7 @@ export const installPathfinderApp = () => {
     root.dataset.pathfinderDarkNight = String(
       config.enabled && config.darkNight,
     );
+    root.dataset.pathfinderGraphicsProfile = config.graphicsProfile;
     root.dataset.pathfinderThirdPerson = String(
       config.thirdPersonView !== "off",
     );
@@ -737,6 +747,8 @@ export const installPathfinderApp = () => {
     widget.enabled.checked = config.enabled;
     widget.darkNight.checked = config.darkNight;
     widget.darkNight.disabled = !config.enabled;
+    widget.graphicsProfile.value = config.graphicsProfile;
+    widget.graphicsProfile.disabled = !config.enabled;
     widget.thirdPersonView.value = config.thirdPersonView;
     widget.cameraView.value = config.thirdPersonView;
     widget.cameraFormat.value = config.cameraVideoFormat;
@@ -1380,6 +1392,12 @@ export const installPathfinderApp = () => {
             <label><span>${tr("ダークナイト", "Dark night")}</span><input class="dark-night" type="checkbox"></label>
             <p class="setting-note">${tr("3placeの夜間視認性補正を止め、以前の暗い夜に戻します。", "Disables 3place's nighttime visibility correction and restores the darker night appearance.")}</p>
           </section>
+
+          <section class="settings-group" aria-labelledby="pathfinder-graphics-settings">
+            <h3 id="pathfinder-graphics-settings">${tr("Pathfinderグラフィック", "Pathfinder graphics")}</h3>
+            <label><span>${tr("負荷設定", "Performance profile")}</span><select class="graphics-profile"><option value="quality">${tr("画質優先", "Quality")}</option><option value="balanced">${tr("バランス", "Balanced")}</option><option value="performance">${tr("軽量", "Performance")}</option></select></label>
+            <p class="setting-note">${tr("公式のグラフィック設定には影響しません。画質優先: 周囲12人のライトと三人称衝突回避。バランス: 6人・20fps更新。軽量: 周囲のライトと衝突回避を停止します。", "Does not change official graphics settings. Quality: 12 nearby lights and third-person collision. Balanced: 6 lights updated at 20 fps. Performance: disables nearby lights and collision avoidance.")}</p>
+          </section>
   
           <details class="settings-help">
             <summary>${tr("操作方法", "Controls")}</summary>
@@ -1442,6 +1460,7 @@ export const installPathfinderApp = () => {
       light: get(".light"),
       lightValue: get(".light-value"),
       darkNight: get(".dark-night"),
+      graphicsProfile: get(".graphics-profile"),
       note: get(".note"),
       compatSummary: get(".compat-summary"),
       compatHook: get(".compat-hook"),
@@ -1472,6 +1491,7 @@ export const installPathfinderApp = () => {
     widget.light.value = String(config.lightIntensity);
     widget.lightValue.textContent = String(config.lightIntensity);
     widget.darkNight.checked = config.darkNight;
+    widget.graphicsProfile.value = config.graphicsProfile;
     updateBridgeStatus();
     updateThirdPersonStatus();
     updateCameraStatus();
@@ -1583,6 +1603,16 @@ export const installPathfinderApp = () => {
       config.darkNight = widget.darkNight.checked;
       save();
       sync3d();
+    };
+    widget.graphicsProfile.onchange = () => {
+      config.graphicsProfile = GRAPHICS_PROFILES.has(
+        widget.graphicsProfile.value,
+      )
+        ? widget.graphicsProfile.value
+        : "quality";
+      save();
+      sync3d();
+      updateWidget();
     };
     widget.cameraPhoto.onclick = capturePathfinderPhoto;
     widget.cameraRecord.onclick = togglePathfinderRecording;
