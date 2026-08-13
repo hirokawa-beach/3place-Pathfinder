@@ -4,10 +4,10 @@
 
 **Camera controls, dynamic lighting, capture tools, and first-person conveniences for [3place](https://3place.world/).**
 
-[![Userscript v1.2.3](https://img.shields.io/badge/userscript-v1.2.3-2ea44f)](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.3.user.js)
+[![Userscript v1.3.0](https://img.shields.io/badge/userscript-v1.3.0-2ea44f)](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.3.0.user.js)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[Install userscript](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.3.user.js) · [Features](#features) · [Third-person](#third-person-view) · [Controls](#controls) · [Development](#development) · [日本語](#日本語の概要)
+[Install userscript](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.3.0.user.js) · [Features](#features) · [Third-person](#third-person-view) · [Controls](#controls) · [Development](#development) · [日本語](#日本語の概要)
 
 </div>
 
@@ -42,7 +42,7 @@ Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 
 - Add a real Three.js helmet spotlight aligned with your view
 - Add direction-aware helmet lights to nearby players
-- Limit nearby lights to the 12 closest players to reduce rendering cost
+- Limit nearby lights to the closest 4 players in quality mode and 2 in balanced mode
 - Disable 3place's nighttime visibility correction with **Dark Night** mode
 
 ### Photo and video capture
@@ -55,6 +55,8 @@ Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 ### Interface
 
 - Movable on-screen launcher and settings panel
+- Optional legacy mode that restores 3place's official painting UI and controls from August 12, 2026
+- On desktop, extends 3place's official Nearby list to 16 named players with clear eight-way arrows, longer visible names, 3D voxel distance, and a selectable navigation HUD. On mobile, Nearby stays compact and keeps the official row count; tapping a name opens a compact navigation card.
 - Quality, balanced, and performance profiles for Pathfinder-only rendering costs without changing 3place's official graphics settings
 - Japanese and English Pathfinder UI with automatic browser-language detection
 - Built-in compatibility diagnostics for 3place updates
@@ -74,11 +76,11 @@ Pathfinder's third-person camera runs on top of an active 3place first-person se
 ## Installation
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) in Chrome, Edge, or Firefox.
-2. Click **[Install 3place Pathfinder](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.2.3.user.js)**.
+2. Click **[Install 3place Pathfinder](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.3.0.user.js)**.
 3. Confirm the installation in Tampermonkey.
 4. Reload [3place](https://3place.world/).
 
-Alternatively, open [`dist/3place-pathfinder-v1.2.3.user.js`](./dist/3place-pathfinder-v1.2.3.user.js), copy its contents into a new Tampermonkey script, and save it.
+Alternatively, open [`dist/3place-pathfinder-v1.3.0.user.js`](./dist/3place-pathfinder-v1.3.0.user.js), copy its contents into a new Tampermonkey script, and save it.
 
 ## Controls
 
@@ -98,6 +100,8 @@ The movement inputs below are native 3place controls. Pathfinder preserves them 
 | `Alt+N` | Toggle Dark Night mode |
 
 Movement speed remains available through 3place's own settings. Language changes reload the page so the complete Pathfinder interface updates consistently.
+
+To use the previous official painting workflow, open Pathfinder's **General settings** and enable **Restore official UI and controls from Aug 12**. This brings back the official-style **Paint (E)** entry, orbit paint dock, and **Paint controls** setting while restoring the August 12 keyboard and pointer behavior. Touch devices use the August 12 Orbit workflow with larger tap targets and a two-row paint dock. Turn it off at any time to return to the current official interface.
 
 ## Data and privacy
 
