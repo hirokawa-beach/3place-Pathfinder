@@ -42,7 +42,7 @@ Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 
 - Add a real Three.js helmet spotlight aligned with your view
 - Add direction-aware helmet lights to nearby players
-- Limit nearby lights to the 12 closest players to reduce rendering cost
+- Limit nearby lights to the closest 4 players in quality mode and 2 in balanced mode
 - Disable 3place's nighttime visibility correction with **Dark Night** mode
 
 ### Photo and video capture
@@ -55,6 +55,7 @@ Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 ### Interface
 
 - Movable on-screen launcher and settings panel
+- Extends 3place's official Nearby list to 16 named players with clear eight-way arrows, longer visible names, 3D voxel distance, and a selectable navigation HUD with separate horizontal and vertical instruments
 - Quality, balanced, and performance profiles for Pathfinder-only rendering costs without changing 3place's official graphics settings
 - Japanese and English Pathfinder UI with automatic browser-language detection
 - Built-in compatibility diagnostics for 3place updates

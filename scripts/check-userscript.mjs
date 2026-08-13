@@ -20,6 +20,18 @@ const requirements = [
   [output.includes("__mcwalk3dBridgeInstalled"), "3D bridge is missing"],
   [output.includes("mcwalk-userscript"), "Pathfinder UI is missing"],
   [
+    output.includes("pathfinder-nearby-state") &&
+      output.includes("pathfinder-presence-snapshot") &&
+      output.includes("nearbyPlayers") &&
+      output.includes("pathfinder-nearby-detail") &&
+      output.includes("pathfinder-nearby-navigation") &&
+      output.includes("pathfinder-nav-compass") &&
+      output.includes("pathfinder-nav-alt-marker") &&
+      output.includes("PRESENCE_SNAPSHOT_INSPECT_INTERVAL_MS") &&
+      output.includes("MAX_NEARBY_ROWS = 16"),
+    "Official Nearby list and navigation enhancements are missing",
+  ],
+  [
     output.includes("pathfinderGraphicsProfile") &&
       output.includes("Pathfinder graphics") &&
       output.includes("maxOtherPlayerLights"),

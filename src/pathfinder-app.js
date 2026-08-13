@@ -154,6 +154,16 @@ export const installPathfinderApp = () => {
   let cameraUiTimer = 0;
   let cameraCropOverlay = null;
   let lastKnownMovementMode = "idle";
+  let officialNearbyObserver = null;
+  let officialNearbyRoot = null;
+  let officialNearbyPlayers = [];
+  let officialNearbyAccounts = new Map();
+  let officialNearbyOrder = [];
+  let officialNearbyExtraKey = "";
+  let selectedNearbyUserId = null;
+  let selectedNearbyName = "";
+  let nearbyNavigationHud = null;
+  const MAX_NEARBY_ROWS = 16;
   
   // 3place currently exposes a reliable fly/walk attribute only for touch
   // controls. Desktop mode remains text-only, so wording checks are isolated
@@ -508,6 +518,375 @@ export const installPathfinderApp = () => {
               "Open the 3D view to enable capture",
             );
     updateCompatibilityStatus();
+  };
+  const nearbyDirection = (bearing) => {
+    const directions = [
+      ["前", "Ahead", "↑"],
+      ["右前", "Ahead right", "↗"],
+      ["右", "Right", "→"],
+      ["右後ろ", "Behind right", "↘"],
+      ["後ろ", "Behind", "↓"],
+      ["左後ろ", "Behind left", "↙"],
+      ["左", "Left", "←"],
+      ["左前", "Ahead left", "↖"],
+    ];
+    const normalized = ((Number(bearing) || 0) + 360) % 360;
+    const index = Math.round(normalized / 45) % directions.length;
+    const [ja, en, arrow] = directions[index];
+    return { arrow, label: tr(ja, en) };
+  };
+  const nearbyDistanceLabel = (distance) => {
+    const value = Number(distance);
+    if (!Number.isFinite(value)) return "";
+    const rounded = value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
+    return tr(`約${rounded} voxels`, `~${rounded} voxels`);
+  };
+  const nearbyCompactDistanceLabel = (distance) => {
+    const value = Number(distance);
+    if (!Number.isFinite(value)) return "";
+    const rounded = value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
+    return tr(`約${rounded} vox`, `~${rounded} vox`);
+  };
+  const nearbyElevationLabel = (elevation) => {
+    const value = Number(elevation);
+    if (!Number.isFinite(value) || Math.abs(value) < 3) {
+      return tr("ほぼ水平", "Level");
+    }
+    const degrees = Math.round(Math.abs(value));
+    return value > 0
+      ? tr(`上 ${degrees}°`, `${degrees}° up`)
+      : tr(`下 ${degrees}°`, `${degrees}° down`);
+  };
+  const nearbyAccountLabel = (account) =>
+    account?.handle ||
+    tr(`アカウント #${account?.id}・名前なし`, `Account #${account?.id} · no handle`);
+  const NEARBY_COLORS = Object.freeze([
+    "#e0565f",
+    "#4f8fe0",
+    "#4fc98d",
+    "#d9a441",
+    "#9a6fe0",
+    "#e07bb1",
+    "#54c2cf",
+    "#8b95a7",
+  ]);
+  const ensureNearbyNavigationHud = () => {
+    if (nearbyNavigationHud?.root?.isConnected) return nearbyNavigationHud;
+    const root = document.createElement("aside");
+    root.id = "pathfinder-nearby-navigation";
+    root.hidden = true;
+    root.setAttribute("aria-live", "polite");
+    root.innerHTML = `
+      <div class="pathfinder-nav-compass" aria-hidden="true">
+        <span class="pathfinder-nav-cardinal pathfinder-nav-front">${tr("前", "FWD")}</span>
+        <span class="pathfinder-nav-cardinal pathfinder-nav-right">${tr("右", "R")}</span>
+        <span class="pathfinder-nav-cardinal pathfinder-nav-back">${tr("後", "BACK")}</span>
+        <span class="pathfinder-nav-cardinal pathfinder-nav-left">${tr("左", "L")}</span>
+        <span class="pathfinder-nav-needle"></span>
+        <span class="pathfinder-nav-center"></span>
+      </div>
+      <div class="pathfinder-nav-copy">
+        <strong></strong>
+        <div class="pathfinder-nav-readings">
+          <span class="pathfinder-nav-reading">
+            <small>${tr("水平方向", "HORIZONTAL")}</small>
+            <b class="pathfinder-nav-direction"></b>
+          </span>
+          <span class="pathfinder-nav-reading">
+            <small>${tr("上下方向", "VERTICAL")}</small>
+            <b class="pathfinder-nav-elevation"></b>
+          </span>
+        </div>
+        <span class="pathfinder-nav-distance-wrap">
+          <small>${tr("3D距離", "3D DISTANCE")}</small>
+          <b class="pathfinder-nav-distance"></b>
+        </span>
+      </div>
+      <div class="pathfinder-nav-altimeter" aria-hidden="true">
+        <span class="pathfinder-nav-alt-up">${tr("上", "UP")}</span>
+        <span class="pathfinder-nav-alt-track">
+          <span class="pathfinder-nav-alt-marker"></span>
+        </span>
+        <span class="pathfinder-nav-alt-down">${tr("下", "DOWN")}</span>
+      </div>
+      <button type="button" aria-label="${tr("ナビを閉じる", "Close navigation")}" title="${tr("ナビを閉じる", "Close navigation")}">×</button>
+    `;
+    root.querySelector("button").onclick = () => selectNearbyUser(null);
+    (document.body || document.documentElement).append(root);
+    nearbyNavigationHud = {
+      root,
+      needle: root.querySelector(".pathfinder-nav-needle"),
+      altitudeMarker: root.querySelector(".pathfinder-nav-alt-marker"),
+      name: root.querySelector("strong"),
+      direction: root.querySelector(".pathfinder-nav-direction"),
+      elevation: root.querySelector(".pathfinder-nav-elevation"),
+      distance: root.querySelector(".pathfinder-nav-distance"),
+    };
+    return nearbyNavigationHud;
+  };
+  const updateNearbyNavigationHud = () => {
+    const hud = ensureNearbyNavigationHud();
+    if (!Number.isSafeInteger(selectedNearbyUserId)) {
+      hud.root.hidden = true;
+      return;
+    }
+    hud.root.hidden = false;
+    const account = officialNearbyAccounts.get(selectedNearbyUserId);
+    const player = officialNearbyPlayers.find(
+      (candidate) => candidate?.userId === selectedNearbyUserId,
+    );
+    const name = account ? nearbyAccountLabel(account) : selectedNearbyName;
+    hud.name.textContent = name || `#${selectedNearbyUserId}`;
+    if (!player) {
+      hud.root.dataset.available = "false";
+      hud.needle.style.setProperty("--pathfinder-bearing", "0deg");
+      hud.altitudeMarker.style.setProperty("--pathfinder-altitude", "0px");
+      hud.direction.textContent = tr(
+        "位置不明",
+        "Unknown",
+      );
+      hud.elevation.textContent = tr("位置不明", "Unknown");
+      hud.distance.textContent = "-";
+      return;
+    }
+    hud.root.dataset.available = "true";
+    const direction = nearbyDirection(player.bearing);
+    const elevationDegrees = Math.max(
+      -89,
+      Math.min(89, Number(player.elevation) || 0),
+    );
+    const elevation = (elevationDegrees * Math.PI) / 180;
+    hud.needle.style.setProperty(
+      "--pathfinder-bearing",
+      `${Number(player.bearing) || 0}deg`,
+    );
+    hud.altitudeMarker.style.setProperty(
+      "--pathfinder-altitude",
+      `${-Math.sin(elevation) * 35}px`,
+    );
+    hud.direction.textContent = direction.label;
+    hud.elevation.textContent = nearbyElevationLabel(player.elevation);
+    hud.distance.textContent = nearbyDistanceLabel(player.distance);
+  };
+  function selectNearbyUser(userId, name = "") {
+    const nextId = Number(userId);
+    if (!Number.isSafeInteger(nextId) || nextId <= 0) {
+      selectedNearbyUserId = null;
+      selectedNearbyName = "";
+    } else if (selectedNearbyUserId === nextId) {
+      selectedNearbyUserId = null;
+      selectedNearbyName = "";
+    } else {
+      selectedNearbyUserId = nextId;
+      selectedNearbyName = name;
+    }
+    syncOfficialNearbyRows();
+    updateNearbyNavigationHud();
+  }
+  const renderExtendedNearbyRows = () => {
+    if (!officialNearbyRoot?.isConnected) return;
+    if (officialNearbyOrder.length === 0) {
+      officialNearbyRoot
+        .querySelectorAll(".pathfinder-nearby-extra")
+        .forEach((row) => row.remove());
+      officialNearbyExtraKey = "";
+      return;
+    }
+    const nativeRows = Array.from(
+      officialNearbyRoot.querySelectorAll(
+        ".nearbyRow:not(.pathfinder-nearby-extra)",
+      ),
+    );
+    const extraAccounts = officialNearbyOrder
+      .slice(nativeRows.length, MAX_NEARBY_ROWS)
+      .map((id) => officialNearbyAccounts.get(id))
+      .filter(Boolean);
+    const key = `${nativeRows.length}|${extraAccounts
+      .map((account) => `${account.id}:${account.handle || ""}:${account.staff ? 1 : 0}`)
+      .join("|")}`;
+    const renderedIds = Array.from(
+      officialNearbyRoot.querySelectorAll(".pathfinder-nearby-extra"),
+      (row) => Number(row.dataset.pathfinderUserId),
+    );
+    const expectedIds = extraAccounts.map((account) => account.id);
+    if (
+      key !== officialNearbyExtraKey ||
+      renderedIds.length !== expectedIds.length ||
+      renderedIds.some((id, index) => id !== expectedIds[index])
+    ) {
+      officialNearbyRoot
+        .querySelectorAll(".pathfinder-nearby-extra")
+        .forEach((row) => row.remove());
+      const fragment = document.createDocumentFragment();
+      for (const account of extraAccounts) {
+        const row = document.createElement("div");
+        row.className = "nearbyRow pathfinder-nearby-extra";
+        row.dataset.pathfinderUserId = String(account.id);
+        const dot = document.createElement("span");
+        dot.className = "nearbyDot";
+        dot.style.backgroundColor =
+          NEARBY_COLORS[((account.id % NEARBY_COLORS.length) + NEARBY_COLORS.length) % NEARBY_COLORS.length];
+        const name = document.createElement("span");
+        name.className = "nearbyName";
+        name.textContent = nearbyAccountLabel(account);
+        row.append(dot, name);
+        if (account.staff) {
+          const badge = document.createElement("span");
+          badge.className = "nearbyStaffBadge";
+          badge.textContent = tr("スタッフ", "Staff");
+          row.append(badge);
+        }
+        fragment.append(row);
+      }
+      const muted = Array.from(
+        officialNearbyRoot.querySelectorAll(".nearbyMuted"),
+      ).find((node) => /^\+\d+\s+more$/i.test(node.textContent.trim()));
+      officialNearbyRoot.insertBefore(fragment, muted || null);
+      officialNearbyExtraKey = key;
+    }
+    const overflow = Array.from(
+      officialNearbyRoot.querySelectorAll(".nearbyMuted"),
+    ).find((node) => /^\+\d+\s+more$/i.test(node.textContent.trim()));
+    if (overflow) {
+      const remaining = Math.max(0, officialNearbyOrder.length - MAX_NEARBY_ROWS);
+      const text = `+${remaining} more`;
+      if (overflow.textContent !== text) overflow.textContent = text;
+      overflow.hidden = remaining === 0;
+    }
+  };
+  const syncOfficialNearbyRows = () => {
+    if (!officialNearbyRoot?.isConnected) return;
+    renderExtendedNearbyRows();
+    const rows = Array.from(officialNearbyRoot.querySelectorAll(".nearbyRow"));
+    const nativeRows = rows.filter(
+      (row) => !row.classList.contains("pathfinder-nearby-extra"),
+    );
+    for (const row of rows) {
+      let account = null;
+      if (row.classList.contains("pathfinder-nearby-extra")) {
+        account = officialNearbyAccounts.get(
+          Number(row.dataset.pathfinderUserId),
+        );
+      } else {
+        const nativeIndex = nativeRows.indexOf(row);
+        account = officialNearbyAccounts.get(officialNearbyOrder[nativeIndex]);
+        if (account) {
+          row.dataset.pathfinderUserId = String(account.id);
+        } else {
+          delete row.dataset.pathfinderUserId;
+        }
+      }
+      const existing = row.querySelector(".pathfinder-nearby-detail");
+      const player = account
+        ? officialNearbyPlayers.find((candidate) => candidate?.userId === account.id)
+        : null;
+      if (!player) {
+        existing?.remove();
+      } else {
+        const direction = nearbyDirection(player.bearing);
+        const description = `${direction.label}, ${nearbyElevationLabel(player.elevation)}, ${nearbyDistanceLabel(player.distance)}`;
+        const detail = existing || document.createElement("span");
+        detail.className = "pathfinder-nearby-detail";
+        detail.dataset.playerKey = player.key;
+        let arrow = detail.querySelector(".pathfinder-nearby-arrow");
+        let distance = detail.querySelector(".pathfinder-nearby-distance");
+        if (!arrow || !distance) {
+          detail.replaceChildren();
+          arrow = document.createElement("span");
+          arrow.className = "pathfinder-nearby-arrow";
+          arrow.setAttribute("aria-hidden", "true");
+          distance = document.createElement("span");
+          distance.className = "pathfinder-nearby-distance";
+          detail.append(arrow, distance);
+        }
+        if (arrow.textContent !== direction.arrow) {
+          arrow.textContent = direction.arrow;
+        }
+        const distanceText = nearbyCompactDistanceLabel(player.distance);
+        if (distance.textContent !== distanceText) distance.textContent = distanceText;
+        detail.title = description;
+        detail.setAttribute("aria-label", description);
+        if (!existing) row.insertBefore(detail, row.querySelector(".nearbyReport"));
+      }
+      const userId = Number(
+        row.dataset.pathfinderUserId || account?.id || player?.userId,
+      );
+      const name = row.querySelector(".nearbyName");
+      if (name && Number.isSafeInteger(userId) && userId > 0) {
+        row.dataset.pathfinderUserId = String(userId);
+        name.dataset.pathfinderNavigate = "true";
+        name.tabIndex = 0;
+        name.setAttribute("role", "button");
+        name.title = tr(
+          `${name.textContent}へのナビを開始`,
+          `Navigate to ${name.textContent}`,
+        );
+        name.setAttribute(
+          "aria-label",
+          tr(`${name.textContent}へナビ`, `Navigate to ${name.textContent}`),
+        );
+        name.setAttribute(
+          "aria-pressed",
+          String(selectedNearbyUserId === userId),
+        );
+        row.dataset.pathfinderSelected = String(selectedNearbyUserId === userId);
+      } else if (name) {
+        delete name.dataset.pathfinderNavigate;
+        name.removeAttribute("tabindex");
+        name.removeAttribute("role");
+        name.removeAttribute("aria-label");
+        name.removeAttribute("aria-pressed");
+        name.removeAttribute("title");
+        delete row.dataset.pathfinderSelected;
+      }
+    }
+    updateNearbyNavigationHud();
+  };
+  const installOfficialNearbyEnhancer = () => {
+    const root = document.getElementById("nearbyPlayers");
+    if (!root || root === officialNearbyRoot) return;
+    officialNearbyObserver?.disconnect();
+    officialNearbyRoot = root;
+    officialNearbyExtraKey = "";
+    root.addEventListener("click", (event) => {
+      const name = event.target.closest?.(".nearbyName[data-pathfinder-navigate=true]");
+      if (!name || !root.contains(name)) return;
+      const row = name.closest(".nearbyRow");
+      selectNearbyUser(Number(row?.dataset.pathfinderUserId), name.textContent.trim());
+    });
+    root.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const name = event.target.closest?.(".nearbyName[data-pathfinder-navigate=true]");
+      if (!name || !root.contains(name)) return;
+      event.preventDefault();
+      const row = name.closest(".nearbyRow");
+      selectNearbyUser(Number(row?.dataset.pathfinderUserId), name.textContent.trim());
+    });
+    officialNearbyObserver = new MutationObserver(syncOfficialNearbyRows);
+    officialNearbyObserver.observe(root, { childList: true, subtree: true });
+    syncOfficialNearbyRows();
+  };
+  const updateOfficialNearbyState = (event) => {
+    const players = event?.detail?.players;
+    officialNearbyPlayers = Array.isArray(players) ? players : [];
+    installOfficialNearbyEnhancer();
+    syncOfficialNearbyRows();
+  };
+  const updateOfficialPresenceSnapshot = (event) => {
+    const players = Array.isArray(event?.detail?.players)
+      ? event.detail.players.filter(
+          (player) => Number.isSafeInteger(player?.id) && player.id > 0,
+        )
+      : [];
+    const nextAccounts = new Map(players.map((player) => [player.id, player]));
+    const present = new Set(nextAccounts.keys());
+    officialNearbyOrder = officialNearbyOrder.filter((id) => present.has(id));
+    for (const player of players) {
+      if (!officialNearbyOrder.includes(player.id)) officialNearbyOrder.push(player.id);
+    }
+    officialNearbyAccounts = nextAccounts;
+    installOfficialNearbyEnhancer();
+    syncOfficialNearbyRows();
   };
   const capturePathfinderPhoto = async () => {
     const api = window.__pathfinderCamera;
@@ -1064,6 +1443,130 @@ export const installPathfinderApp = () => {
     #mcwalk-userscript .state-row > span:first-child { color: var(--pf-text); font-size: 16px; font-weight: 700; letter-spacing: -.02em; }
     #mcwalk-userscript .state, #mcwalk-userscript .camera-state { color: var(--pf-accent-ink); font-size: 11px; font-weight: 700; }
     #mcwalk-userscript[data-state=flying] .state { color: var(--pf-warn); }
+    #nearbyPlayers {
+      width: min(306px, calc(100vw - 24px)) !important;
+      max-height: min(70dvh, 620px); overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    #nearbyPlayers .nearbyRow { min-height: 24px; }
+    #nearbyPlayers .nearbyName {
+      flex: 1 1 132px; min-width: 0;
+    }
+    #nearbyPlayers .nearbyName[data-pathfinder-navigate=true] {
+      border-radius: 4px; cursor: pointer; outline: none;
+    }
+    #nearbyPlayers .nearbyName[data-pathfinder-navigate=true]:hover {
+      color: #fff; background: rgba(255, 255, 255, .07);
+    }
+    #nearbyPlayers .nearbyName[data-pathfinder-navigate=true]:focus-visible {
+      box-shadow: 0 0 0 2px #6ee7d2;
+    }
+    #nearbyPlayers .nearbyRow[data-pathfinder-selected=true] {
+      margin-inline: -5px; padding-inline: 5px; border-radius: 5px;
+      background: rgba(65, 214, 186, .16);
+    }
+    #nearbyPlayers .pathfinder-nearby-detail {
+      display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px;
+      margin-left: auto; color: #d8e0e9;
+      font: 700 11px/1.2 ui-monospace, Consolas, monospace; white-space: nowrap;
+    }
+    #nearbyPlayers .pathfinder-nearby-arrow {
+      display: inline-grid; width: 18px; height: 20px; place-items: center;
+      color: #8ce6d4; text-shadow: 0 1px 2px rgba(4, 9, 13, .8);
+      font: 850 18px/1 system-ui, sans-serif;
+    }
+    #nearbyPlayers .pathfinder-nearby-detail + .nearbyReport { margin-left: 2px; }
+    #pathfinder-nearby-navigation[hidden] { display: none !important; }
+    #pathfinder-nearby-navigation {
+      position: fixed; z-index: 2147483500; top: max(18px, env(safe-area-inset-top)); left: 50%;
+      display: grid; grid-template-columns: 126px minmax(232px, 1fr) 48px 28px; align-items: center; gap: 15px;
+      width: min(540px, calc(100vw - 28px)); min-height: 144px; padding: 14px 12px 14px 15px;
+      border: 1px solid rgba(255, 255, 255, .24); border-radius: 12px;
+      color: #f7fafc; background: rgba(15, 20, 27, .94);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .28);
+      transform: translateX(-50%); animation: pf-nearby-nav-in .18s ease-out both;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-compass {
+      position: relative; width: 122px; height: 122px; border: 1px solid rgba(190, 206, 218, .35);
+      border-radius: 50%; background:
+        linear-gradient(rgba(190, 206, 218, .11) 1px, transparent 1px) center / 100% 50%,
+        linear-gradient(90deg, rgba(190, 206, 218, .11) 1px, transparent 1px) center / 50% 100%,
+        rgba(8, 13, 19, .7);
+      box-shadow: inset 0 0 0 7px rgba(216, 224, 233, .035), inset 0 0 18px rgba(4, 9, 13, .7);
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-cardinal {
+      position: absolute; z-index: 2; color: #aeb9c5; font: 750 10px/1 ui-monospace, Consolas, monospace;
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-front { top: 8px; left: 50%; transform: translateX(-50%); color: #f0f4f8; }
+    #pathfinder-nearby-navigation .pathfinder-nav-right { right: 9px; top: 50%; transform: translateY(-50%); }
+    #pathfinder-nearby-navigation .pathfinder-nav-back { bottom: 8px; left: 50%; transform: translateX(-50%); }
+    #pathfinder-nearby-navigation .pathfinder-nav-left { left: 9px; top: 50%; transform: translateY(-50%); }
+    #pathfinder-nearby-navigation .pathfinder-nav-center {
+      position: absolute; z-index: 4; left: 50%; top: 50%; width: 10px; height: 10px;
+      border: 2px solid #dce4eb; border-radius: 50%; background: #17212a;
+      box-shadow: 0 2px 4px rgba(4, 9, 13, .7); transform: translate(-50%, -50%);
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-needle {
+      position: absolute; z-index: 3; left: calc(50% - 4px); top: 21px; width: 8px; height: 40px;
+      border-radius: 5px 5px 2px 2px; background: linear-gradient(90deg, #087f70 0 40%, #8ce6d4 45% 100%);
+      box-shadow: 2px 2px 4px rgba(4, 9, 13, .7);
+      clip-path: polygon(50% 0, 100% 25%, 74% 100%, 26% 100%, 0 25%);
+      transform: rotate(var(--pathfinder-bearing, 0deg)); transform-origin: 50% 40px;
+      transition: transform .18s ease-out;
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-copy { min-width: 0; }
+    #pathfinder-nearby-navigation strong {
+      display: block; overflow: hidden; margin-bottom: 9px; color: #fff; font-size: 15px; line-height: 1.3;
+      text-overflow: ellipsis; white-space: nowrap;
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-readings {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 9px;
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-reading,
+    #pathfinder-nearby-navigation .pathfinder-nav-distance-wrap { display: block; min-width: 0; }
+    #pathfinder-nearby-navigation small {
+      display: block; margin-bottom: 3px; color: #93a3b1; font: 700 9px/1.2 ui-monospace, Consolas, monospace;
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-direction,
+    #pathfinder-nearby-navigation .pathfinder-nav-elevation {
+      display: block; overflow: hidden; color: #eef3f7; font-size: 18px; line-height: 1.1;
+      text-overflow: ellipsis; white-space: nowrap;
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-elevation { color: #8ce6d4; }
+    #pathfinder-nearby-navigation .pathfinder-nav-distance {
+      display: block; color: #fff; font: 850 29px/1 ui-monospace, Consolas, monospace;
+      letter-spacing: -.045em; white-space: nowrap;
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-altimeter {
+      display: grid; grid-template-rows: 18px 84px 18px; justify-items: center; align-items: center;
+      height: 120px; color: #aeb9c5; font: 750 10px/1 ui-monospace, Consolas, monospace;
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-alt-track {
+      position: relative; display: block; width: 7px; height: 76px; border-radius: 4px;
+      background: rgba(190, 206, 218, .28);
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-alt-track::after {
+      content: ""; position: absolute; left: -5px; top: 50%; width: 17px; border-top: 1px solid rgba(216, 224, 233, .45);
+    }
+    #pathfinder-nearby-navigation .pathfinder-nav-alt-marker {
+      position: absolute; z-index: 2; left: -6px; top: calc(50% - 6px); width: 19px; height: 12px;
+      border: 2px solid #c5fff3; border-radius: 4px; background: #087f70;
+      box-shadow: 0 2px 4px rgba(4, 9, 13, .7);
+      transform: translateY(var(--pathfinder-altitude, 0px)); transition: transform .18s ease-out;
+    }
+    #pathfinder-nearby-navigation[data-available=false] .pathfinder-nav-needle,
+    #pathfinder-nearby-navigation[data-available=false] .pathfinder-nav-alt-marker {
+      background: #64727f; opacity: .65;
+    }
+    #pathfinder-nearby-navigation > button {
+      align-self: start; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px;
+      color: #cbd3dc; background: transparent; font: 24px/1 system-ui, sans-serif; cursor: pointer;
+    }
+    #pathfinder-nearby-navigation > button:hover,
+    #pathfinder-nearby-navigation > button:focus-visible {
+      color: #fff; background: rgba(255, 255, 255, .12); outline: none;
+    }
     /* 3place本体と同じピル型スイッチ */
     #mcwalk-userscript input[type=checkbox] {
       position: relative; appearance: none; -webkit-appearance: none; width: 34px; height: 20px;
@@ -1195,6 +1698,28 @@ export const installPathfinderApp = () => {
       #mcwalk-userscript .panel { --pf-panel-pad: 16px; --pf-panel-radius: 16px; width: calc(100vw - 32px); }
       #mcwalk-userscript .camera-actions { grid-template-columns: 1fr; }
       #mcwalk-userscript .quick-action { min-height: 36px; padding: 0 11px; }
+      #nearbyPlayers { width: min(292px, calc(100vw - 20px)) !important; }
+      #nearbyPlayers .nearbyName { flex-basis: 108px; }
+      #nearbyPlayers .pathfinder-nearby-detail { gap: 4px; font-size: 10px; }
+      #pathfinder-nearby-navigation {
+        grid-template-columns: 94px minmax(0, 1fr) 34px 24px; gap: 8px;
+        min-height: 118px; padding: 9px;
+      }
+      #pathfinder-nearby-navigation .pathfinder-nav-compass { width: 92px; height: 92px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-needle { top: 17px; height: 29px; transform-origin: 50% 29px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-cardinal { font-size: 8px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-front { top: 6px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-right { right: 7px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-back { bottom: 6px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-left { left: 7px; }
+      #pathfinder-nearby-navigation strong { margin-bottom: 7px; font-size: 13px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-readings { gap: 6px; margin-bottom: 7px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-direction,
+      #pathfinder-nearby-navigation .pathfinder-nav-elevation { font-size: 14px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-distance { font-size: 22px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-altimeter { grid-template-rows: 16px 72px 16px; height: 104px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-alt-track { height: 66px; }
+      #pathfinder-nearby-navigation > button { width: 24px; height: 24px; font-size: 21px; }
     }
   
     /* 一般設定: 装飾カードではなく区切り線中心のツール画面 */
@@ -1230,8 +1755,9 @@ export const installPathfinderApp = () => {
     @keyframes pf-panel-down-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes pf-panel-up-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes pf-content-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pf-nearby-nav-in { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
     @media (prefers-reduced-motion: reduce) {
-      #mcwalk-userscript *, #pathfinder-camera-crop * { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+      #mcwalk-userscript *, #pathfinder-camera-crop *, #pathfinder-nearby-navigation * { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
     }
   `;
   const addStyle = () => {
@@ -1477,7 +2003,7 @@ export const installPathfinderApp = () => {
           <section class="settings-group" aria-labelledby="pathfinder-graphics-settings">
             <h3 id="pathfinder-graphics-settings">${tr("Pathfinderグラフィック", "Pathfinder graphics")}</h3>
             <label><span>${tr("負荷設定", "Performance profile")}</span><select class="graphics-profile"><option value="quality">${tr("画質優先", "Quality")}</option><option value="balanced">${tr("バランス", "Balanced")}</option><option value="performance">${tr("軽量", "Performance")}</option></select></label>
-            <p class="setting-note">${tr("公式のグラフィック設定には影響しません。画質優先: 周囲12人のライトと三人称衝突回避。バランス: 6人・20fps更新。軽量: 周囲のライトと衝突回避を停止します。", "Does not change official graphics settings. Quality: 12 nearby lights and third-person collision. Balanced: 6 lights updated at 20 fps. Performance: disables nearby lights and collision avoidance.")}</p>
+            <p class="setting-note">${tr("公式のグラフィック設定には影響しません。画質優先: 周囲4人のライトを20fps更新。バランス: 2人を10fps更新。軽量: 周囲のライトと三人称衝突回避を停止します。", "Does not change official graphics settings. Quality: 4 nearby lights updated at 20 fps. Balanced: 2 lights at 10 fps. Performance: disables nearby lights and third-person collision avoidance.")}</p>
           </section>
   
           <details class="settings-help">
@@ -1722,6 +2248,11 @@ export const installPathfinderApp = () => {
         "pagehide",
         () => {
           closeCameraCropSelector();
+          officialNearbyObserver?.disconnect();
+          officialNearbyObserver = null;
+          officialNearbyRoot = null;
+          nearbyNavigationHud?.root?.remove();
+          nearbyNavigationHud = null;
           if (cameraUiTimer) clearInterval(cameraUiTimer);
           cameraUiTimer = 0;
           if (fovSaveTimer) clearTimeout(fovSaveTimer);
@@ -1739,6 +2270,7 @@ export const installPathfinderApp = () => {
     createWidget();
     observeMode();
     sync3d();
+    installOfficialNearbyEnhancer();
     if (!bridgeStatusObserver && document.documentElement) {
       bridgeStatusObserver = new MutationObserver(() => {
         updateBridgeStatus();
@@ -1766,6 +2298,8 @@ export const installPathfinderApp = () => {
     if (!widget || !hint) setTimeout(boot, UI_TIMING.BOOT_RETRY_MS);
   };
   
+  addEventListener("pathfinder-nearby-state", updateOfficialNearbyState);
+  addEventListener("pathfinder-presence-snapshot", updateOfficialPresenceSnapshot);
   save();
   bindKeys();
   addStyle();
