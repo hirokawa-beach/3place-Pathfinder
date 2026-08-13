@@ -27,6 +27,8 @@ const requirements = [
       output.includes("pathfinder-nearby-navigation") &&
       output.includes("pathfinder-nav-compass") &&
       output.includes("pathfinder-nav-alt-marker") &&
+      output.includes("nearbyCompactMedia") &&
+      output.includes("compactNearbyUi") &&
       output.includes("PRESENCE_SNAPSHOT_INSPECT_INTERVAL_MS") &&
       output.includes("MAX_NEARBY_ROWS = 16"),
     "Official Nearby list and navigation enhancements are missing",
@@ -36,6 +38,15 @@ const requirements = [
       output.includes("Pathfinder graphics") &&
       output.includes("maxOtherPlayerLights"),
     "Pathfinder graphics settings are missing",
+  ],
+  [
+    output.includes("pathfinder-official-legacy-change") &&
+      output.includes("3place-paint-controls-v1") &&
+      output.includes("pathfinder-legacy-paint-dock") &&
+      output.includes("Touch uses Orbit controls") &&
+      output.includes("grid-template-columns: 44px repeat(3") &&
+      output.includes("Restore official UI and controls from Aug 12"),
+    "Official Aug 12 legacy UI and controls are missing",
   ],
   [
     output.includes("3place.world") &&

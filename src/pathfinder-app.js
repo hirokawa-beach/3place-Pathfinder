@@ -115,6 +115,7 @@ export const installPathfinderApp = () => {
           cameraCrop: normalizeCameraCrop(parsed.cameraCrop),
           cameraUnofficialCredit:
             parsed.cameraUnofficialCredit !== false,
+          officialLegacyMode: parsed.officialLegacyMode === true,
           language: SUPPORTED_LANGUAGES.has(parsed.language)
             ? parsed.language
             : "auto",
@@ -133,6 +134,7 @@ export const installPathfinderApp = () => {
       cameraVideoFormat: "auto",
       cameraCrop: null,
       cameraUnofficialCredit: true,
+      officialLegacyMode: false,
       language: "auto",
     };
   };
@@ -152,6 +154,7 @@ export const installPathfinderApp = () => {
   let distanceSaveTimer = null;
   let fovSaveTimer = null;
   let cameraUiTimer = 0;
+  let syncedOfficialLegacyMode = null;
   let cameraCropOverlay = null;
   let lastKnownMovementMode = "idle";
   let officialNearbyObserver = null;
@@ -164,6 +167,10 @@ export const installPathfinderApp = () => {
   let selectedNearbyName = "";
   let nearbyNavigationHud = null;
   const MAX_NEARBY_ROWS = 16;
+  const nearbyCompactMedia = matchMedia(
+    "(max-width: 720px), (pointer: coarse)",
+  );
+  const compactNearbyUi = () => nearbyCompactMedia.matches;
   
   // 3place currently exposes a reliable fly/walk attribute only for touch
   // controls. Desktop mode remains text-only, so wording checks are isolated
@@ -697,6 +704,25 @@ export const installPathfinderApp = () => {
         ".nearbyRow:not(.pathfinder-nearby-extra)",
       ),
     );
+    if (compactNearbyUi()) {
+      officialNearbyRoot
+        .querySelectorAll(".pathfinder-nearby-extra")
+        .forEach((row) => row.remove());
+      officialNearbyExtraKey = "compact";
+      const overflow = Array.from(
+        officialNearbyRoot.querySelectorAll(".nearbyMuted"),
+      ).find((node) => /^\+\d+\s+more$/i.test(node.textContent.trim()));
+      if (overflow) {
+        const remaining = Math.max(
+          0,
+          officialNearbyOrder.length - nativeRows.length,
+        );
+        const text = `+${remaining} more`;
+        if (overflow.textContent !== text) overflow.textContent = text;
+        overflow.hidden = remaining === 0;
+      }
+      return;
+    }
     const extraAccounts = officialNearbyOrder
       .slice(nativeRows.length, MAX_NEARBY_ROWS)
       .map((id) => officialNearbyAccounts.get(id))
@@ -780,7 +806,7 @@ export const installPathfinderApp = () => {
       const player = account
         ? officialNearbyPlayers.find((candidate) => candidate?.userId === account.id)
         : null;
-      if (!player) {
+      if (!player || compactNearbyUi()) {
         existing?.remove();
       } else {
         const direction = nearbyDirection(player.bearing);
@@ -1116,6 +1142,14 @@ export const installPathfinderApp = () => {
     root.dataset.pathfinderCameraUnofficialCredit = String(
       config.cameraUnofficialCredit,
     );
+    if (syncedOfficialLegacyMode !== config.officialLegacyMode) {
+      syncedOfficialLegacyMode = config.officialLegacyMode;
+      dispatchEvent(
+        new CustomEvent("pathfinder-official-legacy-change", {
+          detail: { enabled: config.officialLegacyMode },
+        }),
+      );
+    }
   };
   const updateWidget = () => {
     if (!widget) return;
@@ -1124,6 +1158,7 @@ export const installPathfinderApp = () => {
     widget.toggle.setAttribute("aria-pressed", String(config.enabled));
     widget.onOff.textContent = config.enabled ? "ON" : "OFF";
     widget.enabled.checked = config.enabled;
+    widget.officialLegacyMode.checked = config.officialLegacyMode;
     widget.darkNight.checked = config.darkNight;
     widget.darkNight.disabled = !config.enabled;
     widget.graphicsProfile.value = config.graphicsProfile;
@@ -1444,13 +1479,13 @@ export const installPathfinderApp = () => {
     #mcwalk-userscript .state, #mcwalk-userscript .camera-state { color: var(--pf-accent-ink); font-size: 11px; font-weight: 700; }
     #mcwalk-userscript[data-state=flying] .state { color: var(--pf-warn); }
     #nearbyPlayers {
-      width: min(306px, calc(100vw - 24px)) !important;
       max-height: min(70dvh, 620px); overflow-y: auto;
       scrollbar-width: thin;
     }
     #nearbyPlayers .nearbyRow { min-height: 24px; }
-    #nearbyPlayers .nearbyName {
-      flex: 1 1 132px; min-width: 0;
+    @media (min-width: 721px) and (pointer: fine) {
+      #nearbyPlayers { width: min(306px, calc(100vw - 24px)) !important; }
+      #nearbyPlayers .nearbyName { flex: 1 1 132px; min-width: 0; }
     }
     #nearbyPlayers .nearbyName[data-pathfinder-navigate=true] {
       border-radius: 4px; cursor: pointer; outline: none;
@@ -1692,34 +1727,65 @@ export const installPathfinderApp = () => {
       filter: drop-shadow(0 1px 2px rgba(20, 30, 55, .34)); cursor: nwse-resize; touch-action: none;
     }
 
+    @media (max-width: 720px), (pointer: coarse) {
+      #nearbyPlayers {
+        width: min(200px, calc(100vw - 20px)) !important;
+        max-height: min(54dvh, 420px);
+      }
+      #nearbyPlayers .pathfinder-nearby-detail { display: none !important; }
+      #nearbyPlayers .nearbyName[data-pathfinder-navigate=true] {
+        display: flex; align-items: center; min-width: 0; min-height: 36px;
+        padding-inline: 4px; touch-action: manipulation;
+      }
+      #nearbyPlayers .nearbyRow[data-pathfinder-selected=true] {
+        margin-inline: 0; padding-inline: 0;
+        box-shadow: inset 3px 0 0 #6ee7d2;
+      }
+      #pathfinder-nearby-navigation {
+        top: auto; bottom: calc(max(12px, env(safe-area-inset-bottom)) + 72px);
+        grid-template-columns: minmax(0, 1fr) 44px; gap: 8px;
+        width: min(420px, calc(100vw - 20px)); min-height: 0;
+        padding: 10px 8px 10px 12px; animation: none;
+      }
+      #pathfinder-nearby-navigation .pathfinder-nav-compass,
+      #pathfinder-nearby-navigation .pathfinder-nav-altimeter { display: none; }
+      #pathfinder-nearby-navigation .pathfinder-nav-copy {
+        display: grid; grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end; gap: 6px 10px;
+      }
+      #pathfinder-nearby-navigation strong {
+        grid-column: 1 / -1; margin-bottom: 0; font-size: 13px;
+      }
+      #pathfinder-nearby-navigation .pathfinder-nav-readings {
+        display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px; margin-bottom: 0;
+      }
+      #pathfinder-nearby-navigation small { margin-bottom: 2px; font-size: 8px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-direction,
+      #pathfinder-nearby-navigation .pathfinder-nav-elevation { font-size: 13px; }
+      #pathfinder-nearby-navigation .pathfinder-nav-distance-wrap { text-align: right; }
+      #pathfinder-nearby-navigation .pathfinder-nav-distance { font-size: 20px; }
+      #pathfinder-nearby-navigation > button {
+        align-self: center; width: 44px; height: 44px; font-size: 22px;
+        touch-action: manipulation;
+      }
+      #mcwalk-userscript label, #mcwalk-userscript .state-row { min-height: 48px; }
+      #mcwalk-userscript .quick-action { min-height: 44px; }
+      #mcwalk-userscript .reload,
+      #mcwalk-userscript .camera-crop-row button,
+      #mcwalk-userscript .camera-actions button,
+      #mcwalk-userscript .fov-reset { min-height: 44px; }
+    }
+
     @media (max-width: 520px) {
       #pathfinder-camera-crop .crop-toolbar { flex-wrap: wrap; justify-content: center; white-space: normal; }
       #pathfinder-camera-crop .crop-toolbar span { flex-basis: 100%; text-align: center; }
-      #mcwalk-userscript .panel { --pf-panel-pad: 16px; --pf-panel-radius: 16px; width: calc(100vw - 32px); }
-      #mcwalk-userscript .camera-actions { grid-template-columns: 1fr; }
-      #mcwalk-userscript .quick-action { min-height: 36px; padding: 0 11px; }
-      #nearbyPlayers { width: min(292px, calc(100vw - 20px)) !important; }
-      #nearbyPlayers .nearbyName { flex-basis: 108px; }
-      #nearbyPlayers .pathfinder-nearby-detail { gap: 4px; font-size: 10px; }
-      #pathfinder-nearby-navigation {
-        grid-template-columns: 94px minmax(0, 1fr) 34px 24px; gap: 8px;
-        min-height: 118px; padding: 9px;
+      #mcwalk-userscript .panel {
+        --pf-panel-pad: 16px; --pf-panel-radius: 16px;
+        width: calc(100vw - 24px); max-height: min(72dvh, 620px);
       }
-      #pathfinder-nearby-navigation .pathfinder-nav-compass { width: 92px; height: 92px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-needle { top: 17px; height: 29px; transform-origin: 50% 29px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-cardinal { font-size: 8px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-front { top: 6px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-right { right: 7px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-back { bottom: 6px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-left { left: 7px; }
-      #pathfinder-nearby-navigation strong { margin-bottom: 7px; font-size: 13px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-readings { gap: 6px; margin-bottom: 7px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-direction,
-      #pathfinder-nearby-navigation .pathfinder-nav-elevation { font-size: 14px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-distance { font-size: 22px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-altimeter { grid-template-rows: 16px 72px 16px; height: 104px; }
-      #pathfinder-nearby-navigation .pathfinder-nav-alt-track { height: 66px; }
-      #pathfinder-nearby-navigation > button { width: 24px; height: 24px; font-size: 21px; }
+      #mcwalk-userscript .camera-actions { grid-template-columns: 1fr; }
+      #mcwalk-userscript .quick-action { padding: 0 11px; }
     }
   
     /* 一般設定: 装飾カードではなく区切り線中心のツール画面 */
@@ -1749,6 +1815,11 @@ export const installPathfinderApp = () => {
     #mcwalk-userscript .shortcut-grid kbd {
       min-width: 66px; padding: 3px 6px; border: 1px solid var(--pf-control-border); border-radius: 7px;
       color: var(--pf-text); background: #fff; box-shadow: 0 1px 2px rgba(25, 35, 55, .08); font: 11px/1.4 ui-monospace, Consolas, monospace; text-align: center;
+    }
+    @media (max-width: 720px), (pointer: coarse) {
+      #mcwalk-userscript .settings-view label,
+      #mcwalk-userscript summary { min-height: 48px; }
+      #mcwalk-userscript .setting-action-row .fov-reset { min-height: 44px; }
     }
     @keyframes pf-quick-in { from { opacity: 0; transform: translate(-6px, -50%); } to { opacity: 1; transform: translate(0, -50%); } }
     @keyframes pf-quick-in-left { from { opacity: 0; transform: translate(6px, -50%); } to { opacity: 1; transform: translate(0, -50%); } }
@@ -1972,6 +2043,8 @@ export const installPathfinderApp = () => {
           <section class="settings-group" aria-labelledby="pathfinder-basic-settings">
             <h3 id="pathfinder-basic-settings">${tr("基本", "General")}</h3>
             <label><span>${tr("機能を有効にする", "Enable features")}</span><input class="enabled" type="checkbox"></label>
+            <label><span>${tr("公式UI・操作を8/12版に戻す", "Restore official UI and controls from Aug 12")}</span><input class="official-legacy-mode" type="checkbox"></label>
+            <p class="setting-note">${tr("3place公式のペイントUIと操作方法を、2026年8月12日時点の仕様に切り替えます。", "Switches the official 3place painting UI and controls to their Aug 12, 2026 behavior.")}</p>
             <label><span>${tr("言語(Language)", "Language(言語)")}</span><select class="language"><option value="auto">${tr("自動（ブラウザー）", "Auto (browser)")}</option><option value="ja">${tr("日本語", "Japanese")}</option><option value="en">English</option></select></label>
           </section>
   
@@ -2051,6 +2124,7 @@ export const installPathfinderApp = () => {
       onOff: get(".onoff"),
       state: get(".state"),
       enabled: get(".enabled"),
+      officialLegacyMode: get(".official-legacy-mode"),
       language: get(".language"),
       firstPersonFov: get(".first-person-fov"),
       firstPersonFovValue: get(".first-person-fov-value"),
@@ -2083,6 +2157,7 @@ export const installPathfinderApp = () => {
       cameraRecord: get(".camera-record"),
     };
     widget.enabled.checked = config.enabled;
+    widget.officialLegacyMode.checked = config.officialLegacyMode;
     widget.language.value = config.language;
     widget.thirdPersonView.value = config.thirdPersonView;
     widget.cameraView.value = config.thirdPersonView;
@@ -2172,6 +2247,12 @@ export const installPathfinderApp = () => {
       true,
     );
     widget.enabled.onchange = () => setEnabled(widget.enabled.checked);
+    widget.officialLegacyMode.onchange = () => {
+      config.officialLegacyMode = widget.officialLegacyMode.checked;
+      save();
+      sync3d();
+      updateWidget();
+    };
     widget.language.onchange = () => {
       config.language = SUPPORTED_LANGUAGES.has(widget.language.value)
         ? widget.language.value
@@ -2300,6 +2381,20 @@ export const installPathfinderApp = () => {
   
   addEventListener("pathfinder-nearby-state", updateOfficialNearbyState);
   addEventListener("pathfinder-presence-snapshot", updateOfficialPresenceSnapshot);
+  const handleNearbyCompactChange = () => {
+    officialNearbyExtraKey = "";
+    syncOfficialNearbyRows();
+  };
+  nearbyCompactMedia.addEventListener("change", handleNearbyCompactChange);
+  addEventListener(
+    "pagehide",
+    () =>
+      nearbyCompactMedia.removeEventListener(
+        "change",
+        handleNearbyCompactChange,
+      ),
+    { once: true },
+  );
   save();
   bindKeys();
   addStyle();
