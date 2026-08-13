@@ -31,6 +31,9 @@ export const installPageBridge = () => {
   let mainModulePromise = null;
   let lastDarkNightScan = -Infinity;
   let lastOtherLightSync = -Infinity;
+  let lastNearbySync = -Infinity;
+  let lastPresenceInspectAt = -Infinity;
+  let lastPresenceSnapshotKey = "";
   let rearCursorCanvas = null;
   let rearCursorCamera = null;
   let rearCursorX = Number.NaN;
@@ -75,10 +78,16 @@ export const installPageBridge = () => {
   const threeResolution = new Map();
   const moduleConstructorCache = new WeakMap();
   const firstPersonFovStates = new Map();
+  const nearbyPositionPool = [];
+  const otherAvatarPositionPool = [];
+  const otherLightOriginPool = [];
+  const otherLightQuaternionPool = [];
+  const otherLightDirectionPool = [];
   // Compatibility-sensitive limits and timeouts. Keep these values named so
   // changes in 3place's loading or pointer-lock behavior are easy to audit.
   const HOOK_LIMITS = Object.freeze({
     MAX_OTHER_PLAYER_LIGHTS: 12,
+    MAX_NEARBY_PLAYERS: 16,
     MAX_THREE_PROBE_CANDIDATES: 48,
   });
   const HOOK_TIMING = Object.freeze({
@@ -94,6 +103,8 @@ export const installPageBridge = () => {
     BASEMAP_FOV_VERIFY_INTERVAL_MS: 1000,
     CAMERA_BASEMAP_RENDER_TIMEOUT_MS: 250,
     THIRD_PERSON_COLLISION_SCAN_INTERVAL_MS: 1000,
+    NEARBY_SYNC_INTERVAL_MS: 400,
+    PRESENCE_SNAPSHOT_INSPECT_INTERVAL_MS: 1000,
   });
   const THIRD_PERSON_COLLISION = Object.freeze({
     MIN_DISTANCE: 0.08,
@@ -103,15 +114,86 @@ export const installPageBridge = () => {
     RETURN_SPEED_BLOCKS_PER_SECOND: 10,
     CAMERA_NEAR_PLANE: 0.02,
   });
+
+  // Observe the official presence snapshots without changing messages or the
+  // socket lifecycle. The official Nearby panel only renders a short prefix;
+  // the snapshot lets the userscript extend that same list with real names.
+  const publishPresenceSnapshot = (message) => {
+    if (
+      (message?.t ?? message?.type) !== "players" ||
+      !Array.isArray(message.players)
+    ) {
+      return;
+    }
+    const players = message.players.flatMap((player) => {
+      const id = Number(player?.id);
+      if (!Number.isSafeInteger(id)) return [];
+      const handle =
+        typeof player.handle === "string" && player.handle.trim()
+          ? player.handle.trim().slice(0, 80)
+          : null;
+      return [{
+        id,
+        handle,
+        signedOut: player.signedOut === true,
+        staff: player.staff === true,
+      }];
+    });
+    const snapshotKey = JSON.stringify(players);
+    if (snapshotKey === lastPresenceSnapshotKey) return;
+    lastPresenceSnapshotKey = snapshotKey;
+    dispatchEvent(
+      new CustomEvent("pathfinder-presence-snapshot", {
+        detail: { players },
+      }),
+    );
+  };
+  const inspectPresenceMessage = (data) => {
+    try {
+      if (typeof data !== "string") return;
+      if (
+        !data.includes('"t":"players"') &&
+        !data.includes('"type":"players"')
+      ) {
+        return;
+      }
+      const inspectNow = performance.now();
+      if (
+        inspectNow - lastPresenceInspectAt <
+        HOOK_TIMING.PRESENCE_SNAPSHOT_INSPECT_INTERVAL_MS
+      ) {
+        return;
+      }
+      lastPresenceInspectAt = inspectNow;
+      publishPresenceSnapshot(JSON.parse(data));
+    } catch {}
+  };
+  const installPresenceSocketObserver = () => {
+    const NativeWebSocket = window.WebSocket;
+    if (typeof NativeWebSocket !== "function") return;
+    try {
+      window.WebSocket = new Proxy(NativeWebSocket, {
+        construct(target, args) {
+          const socket = Reflect.construct(target, args, target);
+          socket.addEventListener("message", (event) => {
+            inspectPresenceMessage(event.data);
+          });
+          return socket;
+        },
+      });
+    } catch {}
+  };
+  installPresenceSocketObserver();
+
   const GRAPHICS_PROFILES = Object.freeze({
     quality: Object.freeze({
-      maxOtherPlayerLights: 12,
-      otherLightIntervalMs: 0,
+      maxOtherPlayerLights: 4,
+      otherLightIntervalMs: 50,
       thirdPersonCollision: true,
     }),
     balanced: Object.freeze({
-      maxOtherPlayerLights: 6,
-      otherLightIntervalMs: 50,
+      maxOtherPlayerLights: 2,
+      otherLightIntervalMs: 100,
       thirdPersonCollision: true,
     }),
     performance: Object.freeze({
@@ -1155,6 +1237,132 @@ export const installPageBridge = () => {
         selfUserId = null;
       });
   };
+  const PRESENCE_COLORS = Object.freeze([
+    "#e0565f",
+    "#4f8fe0",
+    "#4fc98d",
+    "#d9a441",
+    "#9a6fe0",
+    "#e07bb1",
+    "#54c2cf",
+    "#8b95a7",
+  ]);
+  const publishNearbyPlayers = (players, status = "ready") => {
+    dispatchEvent(
+      new CustomEvent("pathfinder-nearby-state", {
+        detail: { players, status },
+      }),
+    );
+  };
+  const syncNearbyPlayers = (scene, camera) => {
+    const syncNow = performance.now();
+    if (syncNow - lastNearbySync < HOOK_TIMING.NEARBY_SYNC_INTERVAL_MS) {
+      return;
+    }
+    lastNearbySync = syncNow;
+    if (
+      !enabled("mcwalkEnabled", enabled("mcwalkActive")) ||
+      !document.getElementById("nearbyPlayers")
+    ) {
+      return;
+    }
+    loadSelfUserId();
+    const root = scene.getObjectByName("presence-avatars");
+    if (!root) {
+      publishNearbyPlayers([], "waiting");
+      return;
+    }
+    const cameraPosition = camera.getWorldPosition(camera.position.clone());
+    const cameraForward = camera
+      .getWorldDirection(camera.position.clone())
+      .setY(0);
+    if (
+      cameraForward.lengthSq() <= Number.EPSILON ||
+      ![cameraForward.x, cameraForward.z, cameraPosition.x, cameraPosition.z].every(
+        Number.isFinite,
+      )
+    ) {
+      publishNearbyPlayers([], "unavailable");
+      return;
+    }
+    cameraForward.normalize();
+    const exactSelfName = Number.isSafeInteger(selfUserId)
+      ? `presence-avatar-${selfUserId}`
+      : null;
+    let fallbackSelf = null;
+    let fallbackScore = 1.6;
+    const candidates = [];
+    let nearbyPositionIndex = 0;
+    for (const avatar of root.children) {
+      if (!avatar.visible || !avatar.name?.startsWith("presence-avatar-")) {
+        continue;
+      }
+      const position = avatar.getWorldPosition(
+        (nearbyPositionPool[nearbyPositionIndex] ||= camera.position.clone()),
+      );
+      nearbyPositionIndex += 1;
+      const dx = position.x - cameraPosition.x;
+      const dz = position.z - cameraPosition.z;
+      const eyeDelta = position.y + 1.62 - cameraPosition.y;
+      const selfScore = dx * dx + dz * dz + eyeDelta * eyeDelta * 0.35;
+      if (!exactSelfName && selfScore < fallbackScore) {
+        fallbackScore = selfScore;
+        fallbackSelf = avatar;
+      }
+      candidates.push({
+        avatar,
+        distanceSq: dx * dx + eyeDelta * eyeDelta + dz * dz,
+        horizontalDistanceSq: dx * dx + dz * dz,
+        dx,
+        dy: eyeDelta,
+        dz,
+      });
+    }
+    const players = [];
+    for (const {
+      avatar,
+      distanceSq,
+      horizontalDistanceSq,
+      dx,
+      dy,
+      dz,
+    } of candidates) {
+      const userIdText = avatar.name.slice("presence-avatar-".length);
+      const parsedUserId = /^\d+$/.test(userIdText) ? Number(userIdText) : null;
+      const userId = Number.isSafeInteger(parsedUserId) ? parsedUserId : null;
+      if (
+        players.length >= HOOK_LIMITS.MAX_NEARBY_PLAYERS ||
+        avatar.name === exactSelfName ||
+        avatar === fallbackSelf ||
+        !Number.isSafeInteger(userId) ||
+        userId <= 0 ||
+        distanceSq <= Number.EPSILON
+      ) {
+        continue;
+      }
+      const distance = Math.sqrt(distanceSq);
+      const horizontalDistance = Math.sqrt(horizontalDistanceSq);
+      if (horizontalDistance <= Number.EPSILON) continue;
+      const targetX = dx / horizontalDistance;
+      const targetZ = dz / horizontalDistance;
+      const dot = cameraForward.x * targetX + cameraForward.z * targetZ;
+      const cross = cameraForward.x * targetZ - cameraForward.z * targetX;
+      const bearing = (Math.atan2(cross, dot) * 180) / Math.PI;
+      const elevation = (Math.atan2(dy, horizontalDistance) * 180) / Math.PI;
+      players.push({
+        key: avatar.name,
+        userId,
+        color: PRESENCE_COLORS[
+          ((userId % PRESENCE_COLORS.length) + PRESENCE_COLORS.length) %
+            PRESENCE_COLORS.length
+        ],
+        distance,
+        bearing,
+        elevation,
+      });
+    }
+    publishNearbyPlayers(players);
+  };
   const hideOtherLights = () => {
     for (const record of otherLights.values()) record.light.visible = false;
   };
@@ -1195,7 +1403,15 @@ export const installPageBridge = () => {
     return record;
   };
   const syncOtherLights = (scene, camera) => {
+    const syncNow = performance.now();
     const graphics = graphicsSettings();
+    if (
+      syncNow - lastOtherLightSync <
+      Math.max(50, graphics.otherLightIntervalMs)
+    ) {
+      return;
+    }
+    lastOtherLightSync = syncNow;
     if (graphics.maxOtherPlayerLights <= 0) {
       removeOtherLights();
       return;
@@ -1212,21 +1428,12 @@ export const installPageBridge = () => {
       void ensureLight(scene);
       return;
     }
-    const syncNow = performance.now();
-    if (
-      syncNow - lastOtherLightSync <
-      graphics.otherLightIntervalMs
-    ) {
-      return;
-    }
-    lastOtherLightSync = syncNow;
     loadSelfUserId();
     const root = scene.getObjectByName("presence-avatars");
     if (!root) {
       hideOtherLights();
       return;
     }
-    root.updateMatrixWorld(true);
     const cameraPosition = camera.getWorldPosition(camera.position.clone());
     const exactSelfName = Number.isSafeInteger(selfUserId)
       ? `presence-avatar-${selfUserId}`
@@ -1234,11 +1441,16 @@ export const installPageBridge = () => {
     let fallbackSelf = null;
     let fallbackScore = 1.6;
     const candidates = [];
+    let otherAvatarPositionIndex = 0;
     for (const avatar of root.children) {
       if (!avatar.visible || !avatar.name?.startsWith("presence-avatar-")) {
         continue;
       }
-      const position = avatar.getWorldPosition(camera.position.clone());
+      const position = avatar.getWorldPosition(
+        (otherAvatarPositionPool[otherAvatarPositionIndex] ||=
+          camera.position.clone()),
+      );
+      otherAvatarPositionIndex += 1;
       const dx = position.x - cameraPosition.x;
       const dz = position.z - cameraPosition.z;
       const eyeDelta = position.y + 1.62 - cameraPosition.y;
@@ -1266,10 +1478,15 @@ export const installPageBridge = () => {
       }
       const gaze = avatar.getObjectByName("presence-gaze");
       if (!gaze) continue;
-      const origin = gaze.getWorldPosition(camera.position.clone());
-      const worldQuaternion = gaze.getWorldQuaternion(camera.quaternion.clone());
-      const direction = camera.position
-        .clone()
+      const origin = gaze.getWorldPosition(
+        (otherLightOriginPool[activeCount] ||= camera.position.clone()),
+      );
+      const worldQuaternion = gaze.getWorldQuaternion(
+        (otherLightQuaternionPool[activeCount] ||= camera.quaternion.clone()),
+      );
+      const direction = (
+        otherLightDirectionPool[activeCount] ||= camera.position.clone()
+      )
         .set(0, 0, 1)
         .applyQuaternion(worldQuaternion)
         .normalize();
@@ -1287,7 +1504,7 @@ export const installPageBridge = () => {
       }
       const record = ensureOtherLight(scene, avatar.name);
       if (!record) continue;
-      record.lastSeen = performance.now();
+      record.lastSeen = syncNow;
       record.light.visible = true;
       record.light.intensity = Math.max(15, intensity() * 0.65);
       record.light.position.copy(origin).addScaledVector(direction, 0.18);
@@ -2985,6 +3202,7 @@ export const installPageBridge = () => {
       }
       syncLight(scene, camera);
       syncOtherLights(scene, camera);
+      syncNearbyPlayers(scene, camera);
       return renderThirdPerson(this, original, scene, camera);
     };
   };
