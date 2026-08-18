@@ -28,7 +28,6 @@ export const installPageBridge = () => {
   let localAvatarPromise = null;
   let localAvatarFailedAt = 0;
   let avatarToolkitPromise = null;
-  let mainModulePromise = null;
   let lastDarkNightScan = -Infinity;
   let lastOtherLightSync = -Infinity;
   let lastNearbySync = -Infinity;
@@ -889,57 +888,68 @@ export const installPageBridge = () => {
     if (cause) error.cause = cause;
     return error;
   };
-  const moduleUrl = () => {
-    const preload = document.querySelector(
-      'link[rel="modulepreload"][href*="/assets/main-"][href$=".js"]',
-    );
-    if (preload?.href) return preload.href;
-    return (
-      performance
-        .getEntriesByType("resource")
-        .find((item) =>
-          /\/assets\/main-[^/]+\.js(?:$|\?)/.test(item.name),
-        )?.name ?? null
-    );
+  const addThreeModuleUrl = (urls, value) => {
+    if (!value) return;
+    try {
+      const url = new URL(value, location.href);
+      if (
+        url.origin === location.origin &&
+        /^\/assets\/[^/]+\.js$/.test(url.pathname)
+      ) {
+        urls.add(url.href);
+      }
+    } catch {}
   };
-  const waitForModuleUrl = async () => {
+  const discoverThreeModuleUrls = () => {
+    const urls = new Set();
+    document
+      .querySelectorAll(
+        'link[rel="modulepreload"][href], script[type="module"][src]',
+      )
+      .forEach((element) =>
+        addThreeModuleUrl(urls, element.href || element.src),
+      );
+    performance
+      .getEntriesByType("resource")
+      .forEach((item) => addThreeModuleUrl(urls, item.name));
+    return [...urls];
+  };
+  const waitForThreeModuleUrls = async () => {
     const started = performance.now();
-    let url = moduleUrl();
+    let urls = discoverThreeModuleUrls();
     while (
-      !url &&
+      urls.length === 0 &&
       performance.now() - started < HOOK_TIMING.MODULE_DISCOVERY_TIMEOUT_MS
     ) {
       await new Promise((resolve) =>
         setTimeout(resolve, HOOK_TIMING.MODULE_DISCOVERY_POLL_MS),
       );
-      url = moduleUrl();
+      urls = discoverThreeModuleUrls();
     }
-    if (!url) {
+    if (urls.length === 0) {
       throw resolutionError(
         "module-url-timeout",
-        "3place main module was not found",
+        "3place module assets were not found",
       );
     }
-    return url;
+    return urls;
   };
-  const loadMainModule = () => {
-    if (mainModulePromise) return mainModulePromise;
-    mainModulePromise = (async () => {
-      const url = await waitForModuleUrl();
-      try {
-        return await import(url);
-      } catch (error) {
-        throw resolutionError(
-          "module-import-failed",
-          "3place main module could not be imported",
-          error,
-        );
-      }
-    })().catch((error) => {
-      mainModulePromise = null;
-      throw error;
-    });
-    return mainModulePromise;
+  const loadThreeModules = async () => {
+    const urls = await waitForThreeModuleUrls();
+    const results = await Promise.allSettled(
+      urls.map((url) => import(url)),
+    );
+    const modules = results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    if (modules.length === 0) {
+      throw resolutionError(
+        "module-import-failed",
+        "3place modules could not be imported",
+        results.find((result) => result.status === "rejected")?.reason,
+      );
+    }
+    return modules;
   };
   // Function source inspection is retained only as the last compatibility
   // fallback. Runtime constructors and behavioral probes are preferred.
@@ -996,7 +1006,7 @@ export const installPageBridge = () => {
     moduleConstructorCache.set(module, constructors);
     return constructors;
   };
-  const findModuleThreeConstructor = (module, spec) => {
+  const findSingleModuleThreeConstructor = (module, spec) => {
     const candidates = moduleConstructors(module);
     const expectedNames = new Set(spec.names.map((name) => name.toLowerCase()));
     const named = [
@@ -1045,13 +1055,25 @@ export const installPageBridge = () => {
     }
     return null;
   };
+  const findModuleThreeConstructor = (modules, spec) => {
+    for (const module of modules || []) {
+      const resolved = findSingleModuleThreeConstructor(module, spec);
+      if (resolved) return resolved;
+    }
+    return null;
+  };
   const findRuntimeThreeConstructor = (constructors, spec) => {
     for (const constructor of constructors || []) {
       if (validateConstructor(constructor, spec)) return constructor;
     }
     return null;
   };
-  const resolveThreeConstructor = (name, runtimeConstructors, module, spec) => {
+  const resolveThreeConstructor = (
+    name,
+    runtimeConstructors,
+    modules,
+    spec,
+  ) => {
     const runtimeConstructor = findRuntimeThreeConstructor(
       runtimeConstructors,
       spec,
@@ -1060,8 +1082,8 @@ export const installPageBridge = () => {
       recordThreeResolution(name, "runtime");
       return runtimeConstructor;
     }
-    if (!module) return null;
-    const resolved = findModuleThreeConstructor(module, spec);
+    if (!modules) return null;
+    const resolved = findModuleThreeConstructor(modules, spec);
     if (!resolved) return null;
     recordThreeResolution(name, resolved.strategy);
     return resolved.constructor;
@@ -1134,11 +1156,11 @@ export const installPageBridge = () => {
         SPOT_LIGHT_SPEC,
       );
       if (!SpotLight) {
-        const module = await loadMainModule();
+        const modules = await loadThreeModules();
         SpotLight = resolveThreeConstructor(
           "SpotLight",
           runtime.SpotLight,
-          module,
+          modules,
           SPOT_LIGHT_SPEC,
         );
       }
@@ -1594,7 +1616,7 @@ export const installPageBridge = () => {
     if (avatarToolkitPromise) return avatarToolkitPromise;
     avatarToolkitPromise = (async () => {
       const runtime = collectRuntimeThreeConstructors(streetScene);
-      let module = null;
+      let modules = null;
       const resolveComponent = async (name, spec) => {
         let constructor = resolveThreeConstructor(
           name,
@@ -1603,11 +1625,11 @@ export const installPageBridge = () => {
           spec,
         );
         if (constructor) return constructor;
-        module ||= await loadMainModule();
+        modules ||= await loadThreeModules();
         constructor = resolveThreeConstructor(
           name,
           runtime[name],
-          module,
+          modules,
           spec,
         );
         if (!constructor) {

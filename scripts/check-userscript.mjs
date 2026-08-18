@@ -18,6 +18,12 @@ const requirements = [
   [output.includes("// @grant        none"), "grant metadata is required"],
   [output.includes("https://3place.world/*"), "3place match rule is required"],
   [output.includes("__mcwalk3dBridgeInstalled"), "3D bridge is missing"],
+  [
+    output.includes("discoverThreeModuleUrls") &&
+      output.includes('link[rel="modulepreload"][href]') &&
+      output.includes('script[type="module"][src]'),
+    "split Three.js module discovery is missing",
+  ],
   [output.includes("mcwalk-userscript"), "Pathfinder UI is missing"],
   [
     output.includes("pathfinder-nearby-state") &&
