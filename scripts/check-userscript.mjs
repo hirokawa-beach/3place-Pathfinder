@@ -26,18 +26,11 @@ const requirements = [
   ],
   [output.includes("mcwalk-userscript"), "Pathfinder UI is missing"],
   [
-    output.includes("pathfinder-nearby-state") &&
-      output.includes("pathfinder-presence-snapshot") &&
-      output.includes("nearbyPlayers") &&
-      output.includes("pathfinder-nearby-detail") &&
-      output.includes("pathfinder-nearby-navigation") &&
-      output.includes("pathfinder-nav-compass") &&
-      output.includes("pathfinder-nav-alt-marker") &&
-      output.includes("nearbyCompactMedia") &&
-      output.includes("compactNearbyUi") &&
-      output.includes("PRESENCE_SNAPSHOT_INSPECT_INTERVAL_MS") &&
-      output.includes("MAX_NEARBY_ROWS = 16"),
-    "Official Nearby list and navigation enhancements are missing",
+    output.includes("workshopCameraBtn") &&
+      output.includes("workshopMovementBtn") &&
+      output.includes("switch to walking") &&
+      output.includes("switch to flying"),
+    "Current official first-person controls adapter is missing",
   ],
   [
     output.includes("pathfinderGraphicsProfile") &&
@@ -46,13 +39,16 @@ const requirements = [
     "Pathfinder graphics settings are missing",
   ],
   [
-    output.includes("pathfinder-official-legacy-change") &&
-      output.includes("3place-paint-controls-v1") &&
-      output.includes("pathfinder-legacy-paint-dock") &&
-      output.includes("Touch uses Orbit controls") &&
-      output.includes("grid-template-columns: 44px repeat(3") &&
-      output.includes("Restore official UI and controls from Aug 12"),
-    "Official Aug 12 legacy UI and controls are missing",
+    output.includes("pathfinderOfficialUiHidden") &&
+      output.includes("data-game-ui-hidden") &&
+      output.includes("paint-paused") &&
+      output.includes("!event.altKey"),
+    "Current official UI compatibility handling is missing",
+  ],
+  [
+    !output.includes("Restore official UI and controls from Aug 12") &&
+      !output.includes("installPresenceSocketObserver();"),
+    "Removed legacy UI or WebSocket interception is still active",
   ],
   [
     output.includes("3place.world") &&
@@ -61,9 +57,8 @@ const requirements = [
   ],
   [
     output.includes(".space-backdrop, #mapWrap canvas") &&
-      output.includes("basemap.triggerRepaint()") &&
-      output.includes("CAMERA_BASEMAP_RENDER_TIMEOUT_MS"),
-    "ocean/sky capture synchronization is missing",
+      output.includes("cameraCaptureMetrics"),
+    "current-view capture composition is missing",
   ],
   [
     output.includes("#pathfinder-camera-crop .crop-box") &&

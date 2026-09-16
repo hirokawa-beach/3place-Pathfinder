@@ -4,10 +4,10 @@
 
 **Camera controls, dynamic lighting, capture tools, and first-person conveniences for [3place](https://3place.world/).**
 
-[![Userscript v1.3.1](https://img.shields.io/badge/userscript-v1.3.1-2ea44f)](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.3.1.user.js)
+[![Userscript v1.4.0](https://img.shields.io/badge/userscript-v1.4.0-2ea44f)](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.4.0.user.js)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-[Install userscript](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.3.1.user.js) · [Features](#features) · [Third-person](#third-person-view) · [Controls](#controls) · [Development](#development) · [日本語](#日本語の概要)
+[Install userscript](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.4.0.user.js) · [Features](#features) · [Third-person](#third-person-view) · [Controls](#controls) · [Development](#development) · [日本語](#日本語の概要)
 
 </div>
 
@@ -18,7 +18,7 @@
 
 3place Pathfinder builds on the current 3place experience rather than replacing it. Walking, gravity, collision detection, jumping, and the walking/flight toggle are all native 3place features. Pathfinder automatically selects native walking mode on entry, then adds camera, lighting, live capture, and compatibility conveniences around it.
 
-3place also provides its own movement-speed setting, Showcase photo workflow, Replay video export, dynamic sky, and pointer-lock recovery. Pathfinder leaves movement speed to the official setting. Its capture tools are designed for quick captures of the current Pathfinder view and live, player-controlled recording, while its cursor recovery is specifically for Pathfinder's third-person painting controls.
+3place also provides its own movement-speed setting, Nearby panel, Showcase photo workflow, Replay video export, dynamic sky, and pointer-lock recovery. Pathfinder leaves those official controls intact. Its capture tools are designed for quick captures of the current Pathfinder view and live, player-controlled recording.
 
 Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 
@@ -28,15 +28,13 @@ Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 
 - Automatically start each first-person session in 3place's native walking mode
 - Keep the native `Space` jump and double-`Space` walking/flight toggle unchanged
-- Clamp out-of-range tilt in saved camera URLs while preserving the remaining position values
 
 ### Camera and view controls
 
-- Adjust first-person field of view
 - Switch between first-person, rear third-person, and front third-person views
-- Adjust third-person camera distance with the mouse wheel
+- Adjust third-person camera distance with `Alt` + mouse wheel
 - Reconstruct and display your local avatar in third-person mode
-- Restore first-person pointer-lock after using Pathfinder's third-person paint cursor
+- Automatically use the official first-person view while Paint is active
 
 ### Lighting
 
@@ -55,8 +53,8 @@ Pathfinder is distributed as a single Tampermonkey-compatible userscript.
 ### Interface
 
 - Movable on-screen launcher and settings panel
-- Optional legacy mode that restores 3place's official painting UI and controls from August 12, 2026
-- On desktop, extends 3place's official Nearby list to 16 named players with clear eight-way arrows, longer visible names, 3D voxel distance, and a selectable navigation HUD. On mobile, Nearby stays compact and keeps the official row count; tapping a name opens a compact navigation card.
+- Follow 3place's official UI visibility toggle, including the `H` shortcut
+- Leave the current official Nearby roster and area view unmodified
 - Quality, balanced, and performance profiles for Pathfinder-only rendering costs without changing 3place's official graphics settings
 - Japanese and English Pathfinder UI with automatic browser-language detection
 - Built-in compatibility diagnostics for 3place updates
@@ -69,18 +67,18 @@ Pathfinder's third-person camera runs on top of an active 3place first-person se
 - **Rear view** follows your avatar from behind for movement and exploration.
 - **Front view** faces your avatar and is useful for portraits and live capture.
 - Pathfinder uses your existing presence avatar when available, or reconstructs your local avatar from same-origin 3place account and avatar data.
-- Camera distance can be adjusted from the settings panel or with the mouse wheel while third-person is active.
-- Rear-view painting uses a screen-position cursor and restores first-person pointer-lock after leaving paint mode. This cursor-assisted painting behavior is currently limited to rear view.
+- Camera distance can be adjusted from the settings panel or with `Alt` + mouse wheel while third-person is active.
+- Pathfinder temporarily renders the official first-person view while Paint is active so the current official paint ray and wheel controls remain authoritative.
 - Pathfinder photos and live video recordings can use either rear or front third-person view, including the displayed local avatar.
 
 ## Installation
 
 1. Install [Tampermonkey](https://www.tampermonkey.net/) in Chrome, Edge, or Firefox.
-2. Click **[Install 3place Pathfinder](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.3.1.user.js)**.
+2. Click **[Install 3place Pathfinder](https://raw.githubusercontent.com/hirokawa-beach/3place-Pathfinder/main/dist/3place-pathfinder-v1.4.0.user.js)**.
 3. Confirm the installation in Tampermonkey.
 4. Reload [3place](https://3place.world/).
 
-Alternatively, open [`dist/3place-pathfinder-v1.3.1.user.js`](./dist/3place-pathfinder-v1.3.1.user.js), copy its contents into a new Tampermonkey script, and save it.
+Alternatively, open [`dist/3place-pathfinder-v1.4.0.user.js`](./dist/3place-pathfinder-v1.4.0.user.js), copy its contents into a new Tampermonkey script, and save it.
 
 ## Controls
 
@@ -93,15 +91,13 @@ The movement inputs below are native 3place controls. Pathfinder preserves them 
 | `Space` | Jump while walking |
 | Double-tap `Space` | Switch between walking and flying |
 | `V` or `Alt+V` | Cycle first-person → rear → front view |
-| Mouse wheel | Adjust FOV or third-person distance |
+| `Alt` + mouse wheel | Adjust third-person distance |
 | `F8` | Save a screenshot |
 | `F9` | Start or stop video recording |
 | `Alt+T` | Toggle helmet lights |
 | `Alt+N` | Toggle Dark Night mode |
 
 Movement speed remains available through 3place's own settings. Language changes reload the page so the complete Pathfinder interface updates consistently.
-
-To use the previous official painting workflow, open Pathfinder's **General settings** and enable **Restore official UI and controls from Aug 12**. This brings back the official-style **Paint (E)** entry, orbit paint dock, and **Paint controls** setting while restoring the August 12 keyboard and pointer behavior. Touch devices use the August 12 Orbit workflow with larger tap targets and a two-row paint dock. Turn it off at any time to return to the current official interface.
 
 ## Data and privacy
 
@@ -134,7 +130,6 @@ Source layout:
 ```text
 src/
 ├─ i18n.js             Language detection and translations
-├─ startup.js          Startup URL repair
 ├─ page-bridge.js      Three.js, lighting, third-person, and capture logic
 ├─ pathfinder-app.js   Configuration, interface, and input controls
 └─ main.js             Module startup order
