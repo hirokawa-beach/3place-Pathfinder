@@ -11,7 +11,6 @@ export const installPathfinderApp = () => {
   const LEGACY_CONFIG_KEY = "3place-minecraft-walk-v1";
   const PANEL_POSITION_KEY = "3place-pathfinder-panel-position-v1";
   const VERSION = __PATHFINDER_VERSION__;
-  const DEFAULT_FIRST_PERSON_FOV = 75;
   const DEFAULT_THIRD_PERSON_DISTANCE = 4.25;
   const GRAPHICS_PROFILES = new Set([
     "quality",
@@ -25,12 +24,6 @@ export const installPathfinderApp = () => {
     CAMERA_STATUS_REFRESH_MS: 250,
     BOOT_RETRY_MS: 200,
   });
-  const clampFirstPersonFov = (value) => {
-    const number = Number(value);
-    return Number.isFinite(number)
-      ? Math.max(35, Math.min(110, number))
-      : null;
-  };
   const clampThirdPersonDistance = (value) => {
     const number = Number(value);
     return Number.isFinite(number)
@@ -91,12 +84,6 @@ export const installPathfinderApp = () => {
           graphicsProfile: GRAPHICS_PROFILES.has(parsed.graphicsProfile)
             ? parsed.graphicsProfile
             : "quality",
-          firstPersonFov:
-            parsed.firstPersonFov !== null &&
-            parsed.firstPersonFov !== undefined &&
-            Number.isFinite(Number(parsed.firstPersonFov))
-              ? clampFirstPersonFov(parsed.firstPersonFov)
-              : null,
           thirdPersonView:
             parsed.thirdPersonView === "rear" ||
             parsed.thirdPersonView === "front"
@@ -115,7 +102,6 @@ export const installPathfinderApp = () => {
           cameraCrop: normalizeCameraCrop(parsed.cameraCrop),
           cameraUnofficialCredit:
             parsed.cameraUnofficialCredit !== false,
-          officialLegacyMode: parsed.officialLegacyMode === true,
           language: SUPPORTED_LANGUAGES.has(parsed.language)
             ? parsed.language
             : "auto",
@@ -128,13 +114,11 @@ export const installPathfinderApp = () => {
       lightIntensity: 90,
       darkNight: false,
       graphicsProfile: "quality",
-      firstPersonFov: null,
       thirdPersonView: "off",
       thirdPersonDistance: DEFAULT_THIRD_PERSON_DISTANCE,
       cameraVideoFormat: "auto",
       cameraCrop: null,
       cameraUnofficialCredit: true,
-      officialLegacyMode: false,
       language: "auto",
     };
   };
@@ -143,6 +127,8 @@ export const installPathfinderApp = () => {
   let hint = null;
   let touchFlightButton = null;
   let touchFirstPersonControls = null;
+  let workshopCameraButton = null;
+  let workshopMovementButton = null;
   let observer = null;
   let modeEventsBound = false;
   let forcing = false;
@@ -152,9 +138,9 @@ export const installPathfinderApp = () => {
   let keysBound = false;
   let bridgeStatusObserver = null;
   let distanceSaveTimer = null;
-  let fovSaveTimer = null;
   let cameraUiTimer = 0;
-  let syncedOfficialLegacyMode = null;
+  let officialUiObserver = null;
+  let officialControlDiscoveryObserver = null;
   let cameraCropOverlay = null;
   let lastKnownMovementMode = "idle";
   let officialNearbyObserver = null;
@@ -205,6 +191,9 @@ export const installPathfinderApp = () => {
   };
   const firstPersonUi = Object.freeze({
     isActive: () => {
+      if (/return to orbit/i.test(workshopCameraButton?.getAttribute("aria-label") || "")) {
+        return true;
+      }
       if (!hint || hint.hidden) return false;
       if (touchFirstPersonControls && !touchFirstPersonControls.hidden) {
         return true;
@@ -232,6 +221,18 @@ export const installPathfinderApp = () => {
           publishModeSource("dom");
           return lastKnownMovementMode;
         }
+      }
+      const movementLabel =
+        workshopMovementButton?.getAttribute("aria-label") || "";
+      if (/switch to walking/i.test(movementLabel)) {
+        lastKnownMovementMode = "flying";
+        publishModeSource("dom");
+        return lastKnownMovementMode;
+      }
+      if (/switch to flying/i.test(movementLabel)) {
+        lastKnownMovementMode = "walking";
+        publishModeSource("dom");
+        return lastKnownMovementMode;
       }
       const text = hintText();
       if (textMatchesAny(text, MODE_TEXT_FALLBACKS.flying)) {
@@ -284,6 +285,7 @@ export const installPathfinderApp = () => {
       ),
       "active-rear": tr("動作中（後方）", "Active (rear)"),
       "active-front": tr("動作中（前方）", "Active (front)"),
+      "paint-paused": tr("ペイント中は一人称", "First-person while painting"),
       error: tr("エラー", "Error"),
     };
     widget.thirdPersonStatus.textContent =
@@ -1091,37 +1093,12 @@ export const installPathfinderApp = () => {
     } catch {}
   };
   const mode = () => firstPersonUi.mode();
-  const nativeFirstPersonFov = () =>
-    clampFirstPersonFov(
-      document.documentElement?.dataset.pathfinderNativeFov,
-    ) ?? DEFAULT_FIRST_PERSON_FOV;
-  const updateFirstPersonFovControl = () => {
-    if (!widget?.firstPersonFov) return;
-    const unavailable =
-      document.documentElement?.dataset.pathfinderFovStatus === "unavailable";
-    const nativeFov = nativeFirstPersonFov();
-    const value = config.firstPersonFov ?? nativeFov;
-    widget.firstPersonFov.value = String(value);
-    widget.firstPersonFovValue.textContent =
-      unavailable
-        ? tr("利用不可", "Unavailable")
-        : config.firstPersonFov === null
-        ? `${tr("標準", "Default")} (${Math.round(nativeFov)}°)`
-        : `${Math.round(config.firstPersonFov)}°`;
-    widget.firstPersonFov.disabled = !config.enabled || unavailable;
-    widget.firstPersonFovReset.disabled =
-      !config.enabled || unavailable || config.firstPersonFov === null;
-  };
   const sync3d = () => {
     const root = document.documentElement;
     if (!root) return;
     root.dataset.mcwalkEnabled = String(config.enabled);
     root.dataset.mcwalkActive = String(config.enabled && firstPersonActive);
     root.dataset.pathfinderFirstPersonActive = String(firstPersonActive);
-    root.dataset.pathfinderFirstPersonFov =
-      config.firstPersonFov === null
-        ? "native"
-        : String(config.firstPersonFov);
     root.dataset.mcwalkHeadlight = String(config.headlightEnabled);
     root.dataset.mcwalkLightIntensity = String(config.lightIntensity);
     root.dataset.pathfinderDarkNight = String(
@@ -1142,14 +1119,6 @@ export const installPathfinderApp = () => {
     root.dataset.pathfinderCameraUnofficialCredit = String(
       config.cameraUnofficialCredit,
     );
-    if (syncedOfficialLegacyMode !== config.officialLegacyMode) {
-      syncedOfficialLegacyMode = config.officialLegacyMode;
-      dispatchEvent(
-        new CustomEvent("pathfinder-official-legacy-change", {
-          detail: { enabled: config.officialLegacyMode },
-        }),
-      );
-    }
   };
   const updateWidget = () => {
     if (!widget) return;
@@ -1158,7 +1127,6 @@ export const installPathfinderApp = () => {
     widget.toggle.setAttribute("aria-pressed", String(config.enabled));
     widget.onOff.textContent = config.enabled ? "ON" : "OFF";
     widget.enabled.checked = config.enabled;
-    widget.officialLegacyMode.checked = config.officialLegacyMode;
     widget.darkNight.checked = config.darkNight;
     widget.darkNight.disabled = !config.enabled;
     widget.graphicsProfile.value = config.graphicsProfile;
@@ -1195,8 +1163,17 @@ export const installPathfinderApp = () => {
   const startWalking = () => {
     if (!config.enabled || forcing || mode() !== "flying") return;
     forcing = true;
-    spaceTap();
-    setTimeout(spaceTap, UI_TIMING.WALK_DOUBLE_TAP_DELAY_MS);
+    if (
+      workshopMovementButton?.isConnected &&
+      /switch to walking/i.test(
+        workshopMovementButton.getAttribute("aria-label") || "",
+      )
+    ) {
+      workshopMovementButton.click();
+    } else {
+      spaceTap();
+      setTimeout(spaceTap, UI_TIMING.WALK_DOUBLE_TAP_DELAY_MS);
+    }
     setTimeout(() => {
       forcing = false;
       updateWidget();
@@ -1224,8 +1201,17 @@ export const installPathfinderApp = () => {
   };
   const observeMode = () => {
     const next = document.getElementById("firstPersonHint");
-    if (!next || next === hint) return;
+    const nextCamera = document.getElementById("workshopCameraBtn");
+    const nextMovement = document.getElementById("workshopMovementBtn");
+    if (
+      !next ||
+      (next === hint &&
+        nextCamera === workshopCameraButton &&
+        nextMovement === workshopMovementButton)
+    ) return;
     hint = next;
+    workshopCameraButton = nextCamera;
+    workshopMovementButton = nextMovement;
     touchFlightButton = document.getElementById("touchFlightBtn");
     touchFirstPersonControls = document.getElementById(
       "touchFirstPersonControls",
@@ -1251,11 +1237,35 @@ export const installPathfinderApp = () => {
         attributeFilter: ["hidden", "inert"],
       });
     }
+    for (const button of [workshopCameraButton, workshopMovementButton]) {
+      if (button) {
+        observer.observe(button, {
+          attributes: true,
+          attributeFilter: ["aria-label", "hidden", "disabled"],
+        });
+      }
+    }
     if (!modeEventsBound) {
       addEventListener("pointerlockchange", syncMode, true);
       modeEventsBound = true;
     }
     syncMode();
+  };
+  const observeOfficialUiVisibility = () => {
+    const appRoot = document.getElementById("appRoot");
+    if (!appRoot) return;
+    const syncVisibility = () => {
+      document.documentElement.dataset.pathfinderOfficialUiHidden = String(
+        appRoot.dataset.gameUiHidden === "true",
+      );
+    };
+    officialUiObserver?.disconnect();
+    officialUiObserver = new MutationObserver(syncVisibility);
+    officialUiObserver.observe(appRoot, {
+      attributes: true,
+      attributeFilter: ["data-game-ui-hidden"],
+    });
+    syncVisibility();
   };
   
   const positionLauncherMenu = (root) => {
@@ -1379,6 +1389,10 @@ export const installPathfinderApp = () => {
   // Compact launcher UI. The supplied icon is embedded so the userscript
   // remains self-contained when installed from GitHub or Tampermonkey.
   const CSS = `
+    html[data-pathfinder-official-ui-hidden="true"] #mcwalk-userscript,
+    html[data-pathfinder-official-ui-hidden="true"] #pathfinder-camera-crop {
+      display: none !important;
+    }
     #mcwalk-userscript {
       --pf-accent: var(--accent, #0d9488);
       --pf-accent-ink: var(--accent-ink, #0b6e66);
@@ -1399,7 +1413,7 @@ export const installPathfinderApp = () => {
       --pf-shadow-modal: var(--shadow-modal, 0 24px 60px rgba(20, 30, 55, .32));
       --pf-shadow-pressed: var(--shadow-chrome-pressed, 0 4px 12px rgba(25, 35, 55, .16));
       --pf-warn: #9a570f; --pf-bad: #c43d3d;
-      position: fixed; top: 50%; left: max(16px, env(safe-area-inset-left)); right: auto;
+      position: fixed; top: 50%; left: auto; right: max(16px, env(safe-area-inset-right));
       transform: translateY(-50%); z-index: 2147483600; width: max-content; max-width: calc(100vw - 32px);
       color: var(--pf-text); font: 500 13px/1.45 "Space Grotesk", system-ui, sans-serif;
     }
@@ -1478,15 +1492,6 @@ export const installPathfinderApp = () => {
     #mcwalk-userscript .state-row > span:first-child { color: var(--pf-text); font-size: 16px; font-weight: 700; letter-spacing: -.02em; }
     #mcwalk-userscript .state, #mcwalk-userscript .camera-state { color: var(--pf-accent-ink); font-size: 11px; font-weight: 700; }
     #mcwalk-userscript[data-state=flying] .state { color: var(--pf-warn); }
-    #nearbyPlayers {
-      max-height: min(70dvh, 620px); overflow-y: auto;
-      scrollbar-width: thin;
-    }
-    #nearbyPlayers .nearbyRow { min-height: 24px; }
-    @media (min-width: 721px) and (pointer: fine) {
-      #nearbyPlayers { width: min(306px, calc(100vw - 24px)) !important; }
-      #nearbyPlayers .nearbyName { flex: 1 1 132px; min-width: 0; }
-    }
     #nearbyPlayers .nearbyName[data-pathfinder-navigate=true] {
       border-radius: 4px; cursor: pointer; outline: none;
     }
@@ -1728,10 +1733,6 @@ export const installPathfinderApp = () => {
     }
 
     @media (max-width: 720px), (pointer: coarse) {
-      #nearbyPlayers {
-        width: min(200px, calc(100vw - 20px)) !important;
-        max-height: min(54dvh, 420px);
-      }
       #nearbyPlayers .pathfinder-nearby-detail { display: none !important; }
       #nearbyPlayers .nearbyName[data-pathfinder-navigate=true] {
         display: flex; align-items: center; min-width: 0; min-height: 36px;
@@ -1836,29 +1837,6 @@ export const installPathfinderApp = () => {
     style.textContent = CSS;
     (document.head || document.documentElement).append(style);
   };
-  const setFirstPersonFov = (value, persistImmediately = true) => {
-    const next = clampFirstPersonFov(value);
-    if (next === null) return;
-    config.firstPersonFov = next;
-    updateFirstPersonFovControl();
-    sync3d();
-    if (persistImmediately) {
-      save();
-      return;
-    }
-    clearTimeout(fovSaveTimer);
-    fovSaveTimer = setTimeout(
-      save,
-      UI_TIMING.DISTANCE_SAVE_DEBOUNCE_MS,
-    );
-  };
-  const resetFirstPersonFov = () => {
-    clearTimeout(fovSaveTimer);
-    config.firstPersonFov = null;
-    updateFirstPersonFovControl();
-    sync3d();
-    save();
-  };
   const setThirdPersonDistance = (value, persistImmediately = true) => {
     config.thirdPersonDistance = clampThirdPersonDistance(value);
     if (widget) {
@@ -1954,6 +1932,8 @@ export const installPathfinderApp = () => {
         if (
           !config.enabled ||
           !firstPersonActive ||
+          !event.altKey ||
+          config.thirdPersonView === "off" ||
           !eventTargetsStreetWorld(event) ||
           widget?.root.contains(event.target)
         ) {
@@ -1970,18 +1950,10 @@ export const installPathfinderApp = () => {
         event.stopImmediatePropagation();
         const direction = Math.sign(pixels);
         const strength = Math.min(1.5, Math.max(0.35, Math.abs(pixels) / 100));
-        if (config.thirdPersonView === "off") {
-          setFirstPersonFov(
-            (config.firstPersonFov ?? nativeFirstPersonFov()) +
-              direction * strength * 2.5,
-            false,
-          );
-        } else {
-          setThirdPersonDistance(
-            config.thirdPersonDistance + direction * strength * 0.55,
-            false,
-          );
-        }
+        setThirdPersonDistance(
+          config.thirdPersonDistance + direction * strength * 0.55,
+          false,
+        );
       },
       { capture: true, passive: false },
     );
@@ -2043,18 +2015,11 @@ export const installPathfinderApp = () => {
           <section class="settings-group" aria-labelledby="pathfinder-basic-settings">
             <h3 id="pathfinder-basic-settings">${tr("基本", "General")}</h3>
             <label><span>${tr("機能を有効にする", "Enable features")}</span><input class="enabled" type="checkbox"></label>
-            <label><span>${tr("公式UI・操作を8/12版に戻す", "Restore official UI and controls from Aug 12")}</span><input class="official-legacy-mode" type="checkbox"></label>
-            <p class="setting-note">${tr("3place公式のペイントUIと操作方法を、2026年8月12日時点の仕様に切り替えます。", "Switches the official 3place painting UI and controls to their Aug 12, 2026 behavior.")}</p>
             <label><span>${tr("言語(Language)", "Language(言語)")}</span><select class="language"><option value="auto">${tr("自動（ブラウザー）", "Auto (browser)")}</option><option value="ja">${tr("日本語", "Japanese")}</option><option value="en">English</option></select></label>
           </section>
   
           <section class="settings-group" aria-labelledby="pathfinder-view-settings">
             <h3 id="pathfinder-view-settings">${tr("視点", "View")}</h3>
-            <div class="range">
-              <span>${tr("一人称視野角", "First-person FOV")}</span><output class="first-person-fov-value">${tr("標準", "Default")}</output>
-              <input class="first-person-fov" type="range" min="35" max="110" step="1">
-              <div class="setting-action-row"><button class="fov-reset" type="button">${tr("標準に戻す", "Reset to default")}</button></div>
-            </div>
             <label><span>${tr("三人称視点", "Third-person view")}</span><select class="third-person-view"><option value="off">OFF</option><option value="rear">${tr("後方", "Rear")}</option><option value="front">${tr("前方", "Front")}</option></select></label>
             <div class="range">
               <span>${tr("三人称表示距離", "Third-person distance")}</span><output class="third-person-distance-value"></output>
@@ -2083,7 +2048,7 @@ export const installPathfinderApp = () => {
             <summary>${tr("操作方法", "Controls")}</summary>
             <div class="shortcut-grid">
               <kbd>V / Alt+V</kbd><span>${tr("視点を切り替える", "Switch view")}</span>
-              <kbd>${tr("ホイール", "Wheel")}</kbd><span>${tr("視野角・表示距離を調整", "Adjust FOV or distance")}</span>
+              <kbd>Alt + ${tr("ホイール", "Wheel")}</kbd><span>${tr("三人称の表示距離を調整", "Adjust third-person distance")}</span>
               <kbd>F8</kbd><span>${tr("静止画を保存", "Save photo")}</span>
               <kbd>F9</kbd><span>${tr("録画を開始・終了", "Start/stop recording")}</span>
               <kbd>Alt+T</kbd><span>${tr("ライトを切り替える", "Toggle lights")}</span>
@@ -2124,11 +2089,7 @@ export const installPathfinderApp = () => {
       onOff: get(".onoff"),
       state: get(".state"),
       enabled: get(".enabled"),
-      officialLegacyMode: get(".official-legacy-mode"),
       language: get(".language"),
-      firstPersonFov: get(".first-person-fov"),
-      firstPersonFovValue: get(".first-person-fov-value"),
-      firstPersonFovReset: get(".fov-reset"),
       thirdPersonView: get(".third-person-view"),
       cameraView: get(".camera-view-select"),
       cameraFormat: get(".camera-format"),
@@ -2157,7 +2118,6 @@ export const installPathfinderApp = () => {
       cameraRecord: get(".camera-record"),
     };
     widget.enabled.checked = config.enabled;
-    widget.officialLegacyMode.checked = config.officialLegacyMode;
     widget.language.value = config.language;
     widget.thirdPersonView.value = config.thirdPersonView;
     widget.cameraView.value = config.thirdPersonView;
@@ -2247,12 +2207,6 @@ export const installPathfinderApp = () => {
       true,
     );
     widget.enabled.onchange = () => setEnabled(widget.enabled.checked);
-    widget.officialLegacyMode.onchange = () => {
-      config.officialLegacyMode = widget.officialLegacyMode.checked;
-      save();
-      sync3d();
-      updateWidget();
-    };
     widget.language.onchange = () => {
       config.language = SUPPORTED_LANGUAGES.has(widget.language.value)
         ? widget.language.value
@@ -2286,10 +2240,6 @@ export const installPathfinderApp = () => {
     widget.thirdPersonDistance.oninput = () => {
       setThirdPersonDistance(widget.thirdPersonDistance.value);
     };
-    widget.firstPersonFov.oninput = () => {
-      setFirstPersonFov(widget.firstPersonFov.value, false);
-    };
-    widget.firstPersonFovReset.onclick = resetFirstPersonFov;
     widget.headlight.onchange = () => {
       config.headlightEnabled = widget.headlight.checked;
       save();
@@ -2329,15 +2279,12 @@ export const installPathfinderApp = () => {
         "pagehide",
         () => {
           closeCameraCropSelector();
-          officialNearbyObserver?.disconnect();
-          officialNearbyObserver = null;
-          officialNearbyRoot = null;
-          nearbyNavigationHud?.root?.remove();
-          nearbyNavigationHud = null;
+          officialUiObserver?.disconnect();
+          officialUiObserver = null;
+          officialControlDiscoveryObserver?.disconnect();
+          officialControlDiscoveryObserver = null;
           if (cameraUiTimer) clearInterval(cameraUiTimer);
           cameraUiTimer = 0;
-          if (fovSaveTimer) clearTimeout(fovSaveTimer);
-          fovSaveTimer = null;
         },
         { once: true },
       );
@@ -2350,13 +2297,22 @@ export const installPathfinderApp = () => {
     bindKeys();
     createWidget();
     observeMode();
+    observeOfficialUiVisibility();
+    if (!officialControlDiscoveryObserver && document.body) {
+      officialControlDiscoveryObserver = new MutationObserver(() => {
+        observeMode();
+        if (!officialUiObserver) observeOfficialUiVisibility();
+      });
+      officialControlDiscoveryObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    }
     sync3d();
-    installOfficialNearbyEnhancer();
     if (!bridgeStatusObserver && document.documentElement) {
       bridgeStatusObserver = new MutationObserver(() => {
         updateBridgeStatus();
         updateThirdPersonStatus();
-        updateFirstPersonFovControl();
       });
       bridgeStatusObserver.observe(document.documentElement, {
         attributes: true,
@@ -2367,8 +2323,6 @@ export const installPathfinderApp = () => {
           "data-pathfinder-three-error",
           "data-pathfinder-three-details",
           "data-pathfinder-pointer-lock",
-          "data-pathfinder-native-fov",
-          "data-pathfinder-fov-status",
           "data-pathfinder-third-person-status",
         ],
       });
@@ -2379,22 +2333,6 @@ export const installPathfinderApp = () => {
     if (!widget || !hint) setTimeout(boot, UI_TIMING.BOOT_RETRY_MS);
   };
   
-  addEventListener("pathfinder-nearby-state", updateOfficialNearbyState);
-  addEventListener("pathfinder-presence-snapshot", updateOfficialPresenceSnapshot);
-  const handleNearbyCompactChange = () => {
-    officialNearbyExtraKey = "";
-    syncOfficialNearbyRows();
-  };
-  nearbyCompactMedia.addEventListener("change", handleNearbyCompactChange);
-  addEventListener(
-    "pagehide",
-    () =>
-      nearbyCompactMedia.removeEventListener(
-        "change",
-        handleNearbyCompactChange,
-      ),
-    { once: true },
-  );
   save();
   bindKeys();
   addStyle();
