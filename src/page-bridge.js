@@ -182,7 +182,6 @@ export const installPageBridge = () => {
       });
     } catch {}
   };
-  installPresenceSocketObserver();
 
   const GRAPHICS_PROFILES = Object.freeze({
     quality: Object.freeze({
@@ -539,7 +538,6 @@ export const installPageBridge = () => {
       return false;
     }
   };
-  installBasemapCapture();
   const restoreFirstPersonFov = (camera) => {
     const state = firstPersonFovStates.get(camera);
     if (!state || state.applied === null) return;
@@ -605,13 +603,9 @@ export const installPageBridge = () => {
     const hint = document.getElementById("firstPersonHint");
     return Boolean(hint && !hint.hidden && hint.dataset.locked === "true");
   };
-  const rearCursorWanted = () =>
-    pointerLockSpoofAvailable &&
-    !rearCursorRelockPending &&
-    enabled("mcwalkEnabled", enabled("mcwalkActive")) &&
-    thirdPersonView() === "rear" &&
-    firstPersonIsActuallyActive() &&
-    document.getElementById("dock")?.dataset.state === "paint";
+  // The current official paint engine owns its pointer ray. Do not spoof it:
+  // third-person rendering pauses while Paint is active instead.
+  const rearCursorWanted = () => false;
   const rearCursorActive = () =>
     rearCursorCanvas !== null && rearCursorWanted();
   const rearCursorWorldTarget = (event, canvas) => {
@@ -2403,6 +2397,10 @@ export const installPageBridge = () => {
     return thirdPersonCollisionDistance;
   };
   const renderThirdPerson = (renderer, original, scene, camera) => {
+    if (document.getElementById("dock")?.dataset.state === "paint") {
+      setThirdPersonStatus("paint-paused");
+      return original.call(renderer, scene, camera);
+    }
     const view = thirdPersonView();
     const on =
       enabled("mcwalkEnabled", enabled("mcwalkActive")) &&
@@ -3224,7 +3222,6 @@ export const installPageBridge = () => {
       }
       syncLight(scene, camera);
       syncOtherLights(scene, camera);
-      syncNearbyPlayers(scene, camera);
       return renderThirdPerson(this, original, scene, camera);
     };
   };
